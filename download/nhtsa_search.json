@@ -1,0 +1,47 @@
+[
+  {
+    "url": "https://vpic.nhtsa.dot.gov/api",
+    "name": "Vehicle API - NHTSA vPIC - Department of Transportation",
+    "snippet": "The NHTSA Product Information Catalog Vehicle Listing (vPIC) Application Programming Interface (API) provides different ways to gather information on Vehicles ...",
+    "host_name": "vpic.nhtsa.dot.gov",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.nhtsa.gov/nhtsa-datasets-and-apis",
+    "name": "NHTSA Datasets and APIs",
+    "snippet": "Request a list of vehicle Makes by providing a specific vehicle Model Year. ... Response Fields: Response is a list of vehicle Makes for that Model Year. Use the ...",
+    "host_name": "www.nhtsa.gov",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://cardog.app/blog/free-vin-decoder-api-comparison",
+    "name": "Free VIN Decoder API Comparison 2026: NHTSA vs Cardog vs Auto",
+    "snippet": "Developer's guide to free VIN decoder APIs. Compare NHTSA vPIC, Cardog, Auto.dev, and more for accuracy, speed, pricing, and real-world ...",
+    "host_name": "cardog.app",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://learn.microsoft.com/en-us/connectors/nhtsavpicip",
+    "name": "NHTSA vPIC (Independent Publisher) - Connectors - Microsoft Learn",
+    "snippet": "The NHTSA Product Information Catalog Vehicle Listing (vPIC) Application Programming Interface (API) provides different ways to gather information on Vehicles ...",
+    "host_name": "learn.microsoft.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://pypi.org/project/vpic-api",
+    "name": "vpic-api - PyPI",
+    "snippet": "A Python client library for decoding VINs and querying the United States National Highway Traffic Safety Administration (NHTSA) Vehicle Product Information ...",
+    "host_name": "pypi.org",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  }
+]

@@ -104,6 +104,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [fetchingNHTSA, setFetchingNHTSA] = useState(false);
   const [selectedCar, setSelectedCar] = useState<CarModel | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [currentPage, setCurrentPage] = useState(1);
@@ -160,13 +161,33 @@ export default function Home() {
     try {
       const res = await fetch("/api/cars/seed", { method: "POST" });
       const data = await res.json();
-      toast({ title: "Success", description: `${data.count} cars seeded to database` });
+      toast({ title: "Success", description: `${data.sampleCount} sample cars seeded. NHTSA API fetch running in background...` });
       fetchCars(1);
       fetchFilters();
+      // Wait a bit for background NHTSA fetch, then refresh
+      setTimeout(() => { fetchCars(1); fetchFilters(); }, 15000);
     } catch {
       toast({ title: "Error", description: "Failed to seed database", variant: "destructive" });
     } finally {
       setSeeding(false);
+    }
+  };
+
+  const fetchNHTSAData = async () => {
+    setFetchingNHTSA(true);
+    try {
+      const res = await fetch("/api/cars/fetch-nhtsa", { method: "POST" });
+      const data = await res.json();
+      toast({
+        title: "NHTSA Fetch Complete",
+        description: `Fetched ${data.totalFetched} models, added ${data.totalAdded} new, updated ${data.totalUpdated}`,
+      });
+      fetchCars(currentPage);
+      fetchFilters();
+    } catch {
+      toast({ title: "Error", description: "Failed to fetch from NHTSA API", variant: "destructive" });
+    } finally {
+      setFetchingNHTSA(false);
     }
   };
 
@@ -226,10 +247,10 @@ export default function Home() {
     fetchCars(1);
   }, [searchQuery, brandFilter, typeFilter, yearFilter, fuelTypeFilter, transmissionFilter]);
 
-  // Auto-seed if no cars
+  // Auto-fetch from NHTSA if no cars
   useEffect(() => {
-    if (!loading && cars.length === 0 && !searchQuery && brandFilter === "all") {
-      seedDatabase();
+    if (!loading && cars.length === 0 && !searchQuery && brandFilter === "all" && !seeding && !fetchingNHTSA) {
+      fetchNHTSAData();
     }
   }, [loading, cars.length]);
 
@@ -315,12 +336,12 @@ export default function Home() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={refreshData}
-                disabled={refreshing}
+                onClick={fetchNHTSAData}
+                disabled={fetchingNHTSA || refreshing}
                 className="gap-1.5"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Refresh</span>
+                <RefreshCw className={`h-3.5 w-3.5 ${fetchingNHTSA ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Fetch from NHTSA</span>
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -502,13 +523,20 @@ export default function Home() {
             </h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-md">
               {seeding
-                ? "Seeding the database with sample car data..."
-                : "Start by seeding the database with sample data, or adjust your filters."}
+                ? "Seeding the database with sample car data and fetching from NHTSA API..."
+                : fetchingNHTSA
+                ? "Fetching car models from NHTSA API (this may take a minute)..."
+                : "Load data from the NHTSA government API with hundreds of makes and models."}
             </p>
-            {!seeding && (
-              <Button onClick={seedDatabase} disabled={seeding}>
-                Seed Database
-              </Button>
+            {!seeding && !fetchingNHTSA && (
+              <div className="flex gap-3">
+                <Button onClick={fetchNHTSAData} disabled={fetchingNHTSA}>
+                  Fetch from NHTSA API
+                </Button>
+                <Button onClick={seedDatabase} variant="outline" disabled={seeding}>
+                  Load Sample Data
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -723,7 +751,7 @@ export default function Home() {
                 Last updated: {new Date(lastUpdated).toLocaleString()}
               </span>
             )}
-            <span>Daily auto-refresh enabled</span>
+            <span>Data source: NHTSA vPIC API</span>
           </div>
         </div>
       </footer>

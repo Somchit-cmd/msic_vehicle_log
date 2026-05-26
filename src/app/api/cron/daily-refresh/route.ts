@@ -1,52 +1,19 @@
-import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
-import { SAMPLE_CAR_DATA, getCarImageUrl } from "@/lib/car-data";
+import { quickFetchNHTSAData } from "@/lib/services/nhtsa-service";
 
 // This endpoint is designed to be called by a cron job daily
-// It refreshes the car data in the database
+// It refreshes the car data from NHTSA API
 export async function GET() {
   try {
-    // Verify this is a legitimate cron request (simple token check)
-    const authHeader = process.env.CRON_SECRET;
-    // In production, you would validate the auth header from the request
-
-    const carsWithImages = SAMPLE_CAR_DATA.map((car) => ({
-      ...car,
-      imageUrl: getCarImageUrl(car.brand, car.model, car.year),
-    }));
-
-    let updatedCount = 0;
-    let addedCount = 0;
-
-    for (const carData of carsWithImages) {
-      const existing = await db.carModel.findFirst({
-        where: {
-          brand: carData.brand,
-          model: carData.model,
-          year: carData.year,
-        },
-      });
-
-      if (existing) {
-        await db.carModel.update({
-          where: { id: existing.id },
-          data: carData,
-        });
-        updatedCount++;
-      } else {
-        await db.carModel.create({ data: carData });
-        addedCount++;
-      }
-    }
-
-    const totalCars = await db.carModel.count();
+    const result = await quickFetchNHTSAData([2024, 2025]);
 
     return NextResponse.json({
       success: true,
-      message: "Daily refresh completed",
-      updatedCount,
-      addedCount,
-      totalCars,
+      message: "Daily NHTSA refresh completed",
+      totalFetched: result.totalFetched,
+      addedCount: result.totalAdded,
+      updatedCount: result.totalUpdated,
+      errors: result.errors.slice(0, 5),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
