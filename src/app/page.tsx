@@ -75,6 +75,14 @@ interface CarModel {
   bodyStyle: string | null;
   mpgCity: number | null;
   mpgHighway: number | null;
+  source: string | null;
+  externalId: string | null;
+  trim: string | null;
+  region: string | null;
+  sellerType: string | null;
+  mileage: number | null;
+  isNewVehicle: boolean | null;
+  hasAccident: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,6 +115,7 @@ export default function Home() {
   const [fetchingNHTSA, setFetchingNHTSA] = useState(false);
   const [loadingChinese, setLoadingChinese] = useState(false);
   const [fetchingCNC, setFetchingCNC] = useState(false);
+  const [fetchingCarAPIs, setFetchingCarAPIs] = useState(false);
   const [cncProgress, setCncProgress] = useState<string | null>(null);
   const [selectedCar, setSelectedCar] = useState<CarModel | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -212,6 +221,30 @@ export default function Home() {
     }
   };
 
+  const fetchCarAPIsData = async (fullFetch = true) => {
+    setFetchingCarAPIs(true);
+    try {
+      const res = fullFetch
+        ? await fetch("/api/cars/fetch-carapis", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fullFetch: true, maxPages: 2 }),
+          })
+        : await fetch("/api/cars/fetch-carapis");
+      const data = await res.json();
+      toast({
+        title: "CarAPIs Fetch Complete!",
+        description: `Fetched ${data.totalFetched} vehicles from ${data.brandCount} brands (incl. BYD, Polestar, Tesla). Added ${data.totalAdded} new, updated ${data.totalUpdated}.`,
+      });
+      fetchCars(1);
+      fetchFilters();
+    } catch {
+      toast({ title: "Error", description: "Failed to fetch from CarAPIs", variant: "destructive" });
+    } finally {
+      setFetchingCarAPIs(false);
+    }
+  };
+
   const fetchCarNewsChina = async (fullFetch = false) => {
     setFetchingCNC(true);
     setCncProgress("Fetching Chinese EV data from CarNewsChina.com...");
@@ -295,12 +328,11 @@ export default function Home() {
     fetchCars(1);
   }, [searchQuery, brandFilter, typeFilter, yearFilter, fuelTypeFilter, transmissionFilter]);
 
-  // Auto-fetch from NHTSA + CarNewsChina if no cars
+  // Auto-fetch from all sources if no cars
   useEffect(() => {
-    if (!loading && cars.length === 0 && !searchQuery && brandFilter === "all" && !seeding && !fetchingNHTSA && !loadingChinese && !fetchingCNC) {
-      // Load NHTSA data and CarNewsChina data
+    if (!loading && cars.length === 0 && !searchQuery && brandFilter === "all" && !seeding && !fetchingNHTSA && !loadingChinese && !fetchingCNC && !fetchingCarAPIs) {
       fetchNHTSAData();
-      fetchCarNewsChina(false);
+      fetchCarAPIsData(false);
     }
   }, [loading, cars.length]);
 
@@ -392,6 +424,16 @@ export default function Home() {
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${fetchingNHTSA ? "animate-spin" : ""}`} />
                 <span className="hidden sm:inline">Fetch from NHTSA</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fetchCarAPIsData(true)}
+                disabled={fetchingCarAPIs}
+                className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950"
+              >
+                <Zap className={`h-3.5 w-3.5 ${fetchingCarAPIs ? "animate-pulse" : ""}`} />
+                <span className="hidden sm:inline">{fetchingCarAPIs ? "Fetching..." : "CarAPIs (BYD+Global)"}</span>
               </Button>
               <Button
                 variant="outline"
@@ -586,18 +628,18 @@ export default function Home() {
                 ? "Seeding the database with sample car data and fetching from NHTSA API..."
                 : fetchingNHTSA
                 ? "Fetching car models from NHTSA API (this may take a minute)..."
-                : "Load data from NHTSA (global brands) or CarNewsChina (Chinese EV brands like BYD, NIO, XPeng)."}
+                : "Load data from NHTSA (US brands), CarAPIs (BYD, Polestar, Tesla + Global), or CarNewsChina (Chinese EVs)."}
             </p>
             {!seeding && !fetchingNHTSA && !fetchingCNC && (
               <div className="flex gap-3 flex-wrap justify-center">
                 <Button onClick={fetchNHTSAData} disabled={fetchingNHTSA}>
                   Fetch from NHTSA API
                 </Button>
+                <Button onClick={() => fetchCarAPIsData(true)} disabled={fetchingCarAPIs} className="bg-blue-600 hover:bg-blue-700">
+                  Fetch from CarAPIs (BYD + Global)
+                </Button>
                 <Button onClick={() => fetchCarNewsChina(true)} disabled={fetchingCNC} className="bg-emerald-600 hover:bg-emerald-700">
                   Fetch Chinese EVs (CarNewsChina)
-                </Button>
-                <Button onClick={loadChineseBrands} disabled={loadingChinese} variant="outline">
-                  Quick Chinese Brands
                 </Button>
               </div>
             )}
@@ -814,7 +856,7 @@ export default function Home() {
                 Last updated: {new Date(lastUpdated).toLocaleString()}
               </span>
             )}
-            <span>Data: NHTSA vPIC API + CarNewsChina (Chinese EVs)</span>
+            <span>Data: NHTSA vPIC API + CarAPIs (BYD, Global) + CarNewsChina (Chinese EVs)</span>
           </div>
         </div>
       </footer>
@@ -941,6 +983,32 @@ export default function Home() {
                         <Gauge className="h-3.5 w-3.5" />
                         {selectedCar.mpgCity} city{selectedCar.mpgHighway ? ` / ${selectedCar.mpgHighway} hwy` : ""}
                         {selectedCar.fuelType === "Electric" ? " MPGe" : ""}
+                      </span>
+                    </div>
+                  )}
+                  {selectedCar.trim && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Trim</span>
+                      <span className="font-medium text-slate-900 dark:text-slate-100">{selectedCar.trim}</span>
+                    </div>
+                  )}
+                  {selectedCar.region && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Region</span>
+                      <span className="font-medium text-slate-900 dark:text-slate-100">{selectedCar.region}</span>
+                    </div>
+                  )}
+                  {selectedCar.mileage != null && selectedCar.mileage > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Mileage</span>
+                      <span className="font-medium text-slate-900 dark:text-slate-100">{selectedCar.mileage.toLocaleString()} km</span>
+                    </div>
+                  )}
+                  {selectedCar.source && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Source</span>
+                      <span className="font-medium text-slate-900 dark:text-slate-100">
+                        {selectedCar.source === "carapis" ? "CarAPIs" : selectedCar.source === "carnewschina" ? "CarNewsChina" : selectedCar.source === "nhtsa" ? "NHTSA" : selectedCar.source}
                       </span>
                     </div>
                   )}

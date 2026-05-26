@@ -26,6 +26,15 @@ model CarModel {
   bodyStyle    String?
   mpgCity      Int?
   mpgHighway   Int?
+  // CarAPIs extended fields
+  source       String?  // "nhtsa", "carnewschina", "carapis"
+  externalId   String?  // ID from the external API
+  trim         String?  // Trim level
+  region       String?  // Region/market
+  sellerType   String?  // dealer, private
+  mileage      Int?     // Mileage in km
+  isNewVehicle Boolean?
+  hasAccident  Boolean?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
