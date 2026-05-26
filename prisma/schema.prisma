@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model CarModel {
+  id           String   @id @default(cuid())
+  brand        String
+  model        String
+  type         String   // Sedan, SUV, Truck, Hatchback, Coupe, Convertible, Van, Wagon
+  year         Int
+  engine       String?
+  fuelType     String?  // Gasoline, Diesel, Electric, Hybrid
+  transmission String?  // Automatic, Manual, CVT
+  horsepower   Int?
+  torque       Int?
+  drivetrain   String?  // FWD, RWD, AWD, 4WD
+  seatingCapacity Int?
+  price        Float?
+  imageUrl     String?
+  color        String?
+  bodyStyle    String?
+  mpgCity      Int?
+  mpgHighway   Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
