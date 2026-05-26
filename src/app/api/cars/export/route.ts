@@ -36,27 +36,31 @@ export async function GET(request: NextRequest) {
       orderBy: [{ brand: "asc" }, { model: "asc" }],
     });
 
-    if (format === "csv") {
-      const headers = [
-        "Brand",
-        "Model",
-        "Type",
-        "Year",
-        "Engine",
-        "Fuel Type",
-        "Transmission",
-        "Horsepower",
-        "Torque",
-        "Drivetrain",
-        "Seating Capacity",
-        "Price",
-        "Color",
-        "Body Style",
-        "MPG City",
-        "MPG Highway",
-      ];
+    const allHeaders = [
+      "Brand",
+      "Model",
+      "Type",
+      "Year",
+      "Engine",
+      "Fuel Type",
+      "Transmission",
+      "Horsepower",
+      "Torque",
+      "Drivetrain",
+      "Seating Capacity",
+      "Price",
+      "Color",
+      "Body Style",
+      "MPG City",
+      "MPG Highway",
+      "Source",
+      "Trim",
+      "Region",
+      "Mileage (km)",
+    ];
 
-      const csvRows = [headers.join(",")];
+    if (format === "csv") {
+      const csvRows = [allHeaders.join(",")];
 
       for (const car of cars) {
         const row = [
@@ -76,6 +80,10 @@ export async function GET(request: NextRequest) {
           car.bodyStyle ? `"${car.bodyStyle}"` : "",
           car.mpgCity || "",
           car.mpgHighway || "",
+          car.source ? `"${car.source}"` : "",
+          car.trim ? `"${car.trim}"` : "",
+          car.region ? `"${car.region}"` : "",
+          car.mileage || "",
         ];
         csvRows.push(row.join(","));
       }
@@ -92,26 +100,7 @@ export async function GET(request: NextRequest) {
 
     // Excel format - return as tab-separated values with BOM for Excel
     if (format === "excel") {
-      const headers = [
-        "Brand",
-        "Model",
-        "Type",
-        "Year",
-        "Engine",
-        "Fuel Type",
-        "Transmission",
-        "Horsepower",
-        "Torque",
-        "Drivetrain",
-        "Seating Capacity",
-        "Price",
-        "Color",
-        "Body Style",
-        "MPG City",
-        "MPG Highway",
-      ];
-
-      const excelRows = [headers.join("\t")];
+      const excelRows = [allHeaders.join("\t")];
 
       for (const car of cars) {
         const row = [
@@ -131,6 +120,10 @@ export async function GET(request: NextRequest) {
           car.bodyStyle || "",
           car.mpgCity || "",
           car.mpgHighway || "",
+          car.source || "",
+          car.trim || "",
+          car.region || "",
+          car.mileage || "",
         ];
         excelRows.push(row.join("\t"));
       }

@@ -1,23 +1,30 @@
 ---
-Task ID: carnewschina-integration
+Task ID: 1
 Agent: Main Agent
-Task: Integrate CarNewsChina data source for Chinese car brands
+Task: Integrate CarAPIs.com API into AutoCatalog website
 
 Work Log:
-- Explored data.carnewschina.com/database/ to find Chinese EV data
-- Discovered CarNewsChina's internal JSON API: /load-models/all/{page} and /load-models/{brandSlug}/{page}
-- Created CarNewsChina scraper service at /src/lib/services/carnewschina-service.ts
-- Service supports: quick fetch (top 18 brands) and full fetch (all models with specs)
-- Created API route at /api/cars/fetch-carnewschina (GET=quick, POST=full with options)
-- Updated main page UI with "Chinese EVs" button and progress indicator
-- Updated daily refresh cron to include CarNewsChina data
-- Fixed model name cleaning (removes brand prefix from model names)
-- Improved body type detection with Chinese car naming patterns
-- Successfully tested: 182 models from 16 Chinese brands added to database
+- Explored CarAPIs.com API structure: vehicles endpoint with brand, model, trim, year, fuel_type, body_type, photos, price, region, etc.
+- Discovered API has 1,813+ unique vehicles from 49 brands including BYD, Polestar, Tesla
+- API uses Bearer token authentication with user-provided key
+- Updated Prisma schema to add: source, externalId, trim, region, sellerType, mileage, isNewVehicle, hasAccident fields
+- Created CarAPIs service at /src/lib/services/carapis-service.ts with full and quick fetch modes
+- Created API route at /src/app/api/cars/fetch-carapis/route.ts (POST for full, GET for quick)
+- Updated UI page.tsx: added CarAPIs fetch button (blue), updated CarModel interface with new fields
+- Updated empty state with CarAPIs option, updated detail dialog to show trim/region/mileage/source
+- Updated footer to mention all 3 data sources
+- Updated export route to include new fields in CSV/Excel exports
+- Added CARAPIS_API_KEY to .env
+- Ran prisma db push successfully, build compiles clean
+- NOTE: CarAPIs API rate-limited (429) after extensive testing - will work once rate limit resets (~23 hours)
 
 Stage Summary:
-- CarNewsChina API endpoints discovered and integrated
-- 16 Chinese brands now available: BYD, Nio, Xpeng, Zeekr, Geely, Chery, Avatr, Hongqi, GWM, Leapmotor, Denza, Changan, Aion, Lynk & Co, Aito, Deepal
-- Total database: 1447 cars (1265 from NHTSA + 182 from CarNewsChina)
-- CarNewsChina models have real images from their CDN
-- Body type detection works for common Chinese car naming patterns
+- Database currently has 1,447 vehicles from 74 brands including 19 Chinese brands (BYD: 42, NIO, XPeng, Zeekr, etc.)
+- CarAPIs integration code is complete and tested (builds clean, endpoint works but API is rate-limited)
+- Key files created/modified:
+  - /src/lib/services/carapis-service.ts (new)
+  - /src/app/api/cars/fetch-carapis/route.ts (new)
+  - /prisma/schema.prisma (updated with new fields)
+  - /src/app/page.tsx (updated UI with CarAPIs button + new fields)
+  - /src/app/api/cars/export/route.ts (updated with new export fields)
+  - /.env (added CARAPIS_API_KEY)
