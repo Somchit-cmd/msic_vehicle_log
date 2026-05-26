@@ -105,6 +105,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [fetchingNHTSA, setFetchingNHTSA] = useState(false);
+  const [loadingChinese, setLoadingChinese] = useState(false);
   const [selectedCar, setSelectedCar] = useState<CarModel | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [currentPage, setCurrentPage] = useState(1);
@@ -191,6 +192,24 @@ export default function Home() {
     }
   };
 
+  const loadChineseBrands = async () => {
+    setLoadingChinese(true);
+    try {
+      const res = await fetch("/api/cars/seed-chinese", { method: "POST" });
+      const data = await res.json();
+      toast({
+        title: "Chinese Brands Loaded",
+        description: `Added ${data.addedCount} Chinese car models (BYD, NIO, XPeng, Zeekr, etc.)`,
+      });
+      fetchCars(currentPage);
+      fetchFilters();
+    } catch {
+      toast({ title: "Error", description: "Failed to load Chinese brands", variant: "destructive" });
+    } finally {
+      setLoadingChinese(false);
+    }
+  };
+
   const refreshData = async () => {
     setRefreshing(true);
     try {
@@ -247,10 +266,12 @@ export default function Home() {
     fetchCars(1);
   }, [searchQuery, brandFilter, typeFilter, yearFilter, fuelTypeFilter, transmissionFilter]);
 
-  // Auto-fetch from NHTSA if no cars
+  // Auto-fetch from NHTSA + Chinese brands if no cars
   useEffect(() => {
-    if (!loading && cars.length === 0 && !searchQuery && brandFilter === "all" && !seeding && !fetchingNHTSA) {
+    if (!loading && cars.length === 0 && !searchQuery && brandFilter === "all" && !seeding && !fetchingNHTSA && !loadingChinese) {
+      // Load both NHTSA and Chinese brands
       fetchNHTSAData();
+      loadChineseBrands();
     }
   }, [loading, cars.length]);
 
@@ -342,6 +363,16 @@ export default function Home() {
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${fetchingNHTSA ? "animate-spin" : ""}`} />
                 <span className="hidden sm:inline">Fetch from NHTSA</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadChineseBrands}
+                disabled={loadingChinese}
+                className="gap-1.5"
+              >
+                <Car className={`h-3.5 w-3.5 ${loadingChinese ? "animate-pulse" : ""}`} />
+                <span className="hidden sm:inline">Chinese Brands</span>
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -526,12 +557,15 @@ export default function Home() {
                 ? "Seeding the database with sample car data and fetching from NHTSA API..."
                 : fetchingNHTSA
                 ? "Fetching car models from NHTSA API (this may take a minute)..."
-                : "Load data from the NHTSA government API with hundreds of makes and models."}
+                : "Load data from the NHTSA government API or add Chinese car brands (BYD, NIO, XPeng, etc.)."}
             </p>
             {!seeding && !fetchingNHTSA && (
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap justify-center">
                 <Button onClick={fetchNHTSAData} disabled={fetchingNHTSA}>
                   Fetch from NHTSA API
+                </Button>
+                <Button onClick={loadChineseBrands} disabled={loadingChinese} variant="default">
+                  Load Chinese Brands
                 </Button>
                 <Button onClick={seedDatabase} variant="outline" disabled={seeding}>
                   Load Sample Data
@@ -751,7 +785,7 @@ export default function Home() {
                 Last updated: {new Date(lastUpdated).toLocaleString()}
               </span>
             )}
-            <span>Data source: NHTSA vPIC API</span>
+            <span>Data: NHTSA vPIC API + Chinese Brands Database</span>
           </div>
         </div>
       </footer>
