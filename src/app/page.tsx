@@ -27,14 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
+import { PaginationBar } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -1154,34 +1147,15 @@ export default function Home() {
 
         {/* Pagination */}
         {!loading && totalPages > 1 && (
-          <div className="mt-6">
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={() => fetchCars(Math.max(1, currentPage - 1))}
-                    className={currentPage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                  />
-                </PaginationItem>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <PaginationItem key={page}>
-                    <PaginationLink
-                      onClick={() => fetchCars(page)}
-                      isActive={page === currentPage}
-                      className="cursor-pointer"
-                    >
-                      {page}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={() => fetchCars(Math.min(totalPages, currentPage + 1))}
-                    className={currentPage >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+          <div className="mt-8">
+            <PaginationBar
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalCars}
+              itemsPerPage={12}
+              onPageChange={fetchCars}
+              siblingCount={1}
+            />
           </div>
         )}
       </main>
