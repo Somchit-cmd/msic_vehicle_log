@@ -607,10 +607,10 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                  AutoCatalog
+                  MSIC Vehicle Log
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {totalCars > 0 ? `${totalCars} models available` : "Car Model Database"}
+                  {totalCars > 0 ? `${totalCars} models available` : "Vehicle Database"}
                 </p>
               </div>
             </div>
@@ -1191,7 +1191,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-1.5">
             <Car className="h-3.5 w-3.5" />
-            <span>AutoCatalog - Car Model Database</span>
+            <span>MSIC Vehicle Log</span>
           </div>
           <div className="flex items-center gap-4">
             {lastUpdated && (
