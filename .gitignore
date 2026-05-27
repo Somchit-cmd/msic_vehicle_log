@@ -55,6 +55,8 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Custom server (not used on Netlify)
+server.js
 # Local dev scripts
 daemon.sh
 keep-alive.sh
@@ -69,4 +71,4 @@ Caddyfile
 # Local DB
 /db/
 # Examples
-/examples/
+/examples/bun.lock
