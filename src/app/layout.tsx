@@ -14,11 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AutoCatalog - Car Model Database",
-  description: "Browse, search, and export car model details. Updated daily with the latest vehicle information.",
-  keywords: ["cars", "automobiles", "vehicles", "car database", "car catalog"],
+  title: "MSIC Vehicle Log",
+  description: "MSIC Vehicle Log — Browse, search, and export vehicle model details. Updated daily with the latest vehicle information.",
+  keywords: ["msic", "vehicles", "cars", "automobiles", "vehicle log", "car database"],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
 };
 

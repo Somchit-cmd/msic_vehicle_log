@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# netlify
+.netlify
+
 
 # typescript
 *.tsbuildinfo
@@ -52,3 +55,18 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Local dev scripts
+daemon.sh
+keep-alive.sh
+keepalive.sh
+start-persistent.sh
+start.sh
+Caddyfile
+# Download directory (generated files)
+/download/
+# Upload directory
+/upload/
+# Local DB
+/db/
+# Examples
+/examples/
