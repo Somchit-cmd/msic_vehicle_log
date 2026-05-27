@@ -54,6 +54,7 @@ import {
   Zap,
   ArrowUpDown,
   Clock,
+  Database,
 } from "lucide-react";
 
 interface CarModel {
@@ -128,6 +129,8 @@ export default function Home() {
   const [smartcarConnected, setSmartcarConnected] = useState(false);
   const [smartcarVehicles, setSmartcarVehicles] = useState<any[]>([]);
   const [smartcarLoading, setSmartcarLoading] = useState(false);
+  const [fetchingSmartcarCatalog, setFetchingSmartcarCatalog] = useState(false);
+  const [smartcarCatalogInfo, setSmartcarCatalogInfo] = useState<{ available: boolean; totalVehicles: number } | null>(null);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -351,7 +354,13 @@ export default function Home() {
         // Open Smartcar Connect in a new window
         window.open(data.connectUrl, "_blank", "width=600,height=700");
       } else {
-        toast({ title: "Error", description: data.error || "Failed to get Smartcar Connect URL", variant: "destructive" });
+        const desc = data.hint || data.details || data.error || "Failed to get Smartcar Connect URL";
+        toast({
+          title: "Smartcar Connect Error",
+          description: desc,
+          variant: "destructive",
+          duration: 8000,
+        });
       }
     } catch {
       toast({ title: "Error", description: "Failed to connect Smartcar", variant: "destructive" });
@@ -404,6 +413,68 @@ export default function Home() {
     }
   };
 
+  // Smartcar: Fetch catalog data from Compatibility API (FREE, no auth)
+  const fetchSmartcarCatalog = async () => {
+    setFetchingSmartcarCatalog(true);
+    try {
+      // First check availability
+      const statusRes = await fetch("/api/cars/fetch-smartcar");
+      const statusData = await statusRes.json();
+
+      if (!statusData.available) {
+        toast({
+          title: "Smartcar API Unavailable",
+          description: statusData.message || "Cannot reach Smartcar Compatibility API.",
+          variant: "destructive",
+        });
+        setFetchingSmartcarCatalog(false);
+        return;
+      }
+
+      setSmartcarCatalogInfo({ available: true, totalVehicles: statusData.totalVehicles || 0 });
+
+      // Fetch catalog data
+      const res = await fetch("/api/cars/fetch-smartcar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        toast({
+          title: "Smartcar Catalog Error",
+          description: data.message || "Failed to fetch Smartcar catalog data",
+          variant: "destructive",
+        });
+        setFetchingSmartcarCatalog(false);
+        return;
+      }
+
+      toast({
+        title: "Smartcar Catalog Fetched!",
+        description: `Fetched ${data.totalFetched} vehicles from ${data.brandCount} brands. Added ${data.totalAdded} new, updated ${data.totalUpdated}.`,
+      });
+      fetchCars(1);
+      fetchFilters();
+    } catch {
+      toast({ title: "Error", description: "Failed to fetch Smartcar catalog", variant: "destructive" });
+    } finally {
+      setFetchingSmartcarCatalog(false);
+    }
+  };
+
+  // Smartcar: Check catalog API availability
+  const checkSmartcarCatalogStatus = async () => {
+    try {
+      const res = await fetch("/api/cars/fetch-smartcar");
+      const data = await res.json();
+      setSmartcarCatalogInfo({ available: data.available, totalVehicles: data.totalVehicles || 0 });
+    } catch {
+      setSmartcarCatalogInfo({ available: false, totalVehicles: 0 });
+    }
+  };
+
   const exportData = async (format: "csv" | "excel") => {
     try {
       const params = new URLSearchParams();
@@ -434,6 +505,7 @@ export default function Home() {
   useEffect(() => {
     fetchFilters();
     checkSmartcarStatus();
+    checkSmartcarCatalogStatus();
   }, [fetchFilters]);
 
   useEffect(() => {
@@ -585,6 +657,19 @@ export default function Home() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={fetchSmartcarCatalog}
+                disabled={fetchingSmartcarCatalog}
+                className="gap-1.5 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950"
+                title={smartcarCatalogInfo ? `Smartcar Compatibility API — ${smartcarCatalogInfo.totalVehicles} vehicles available (FREE, no auth)` : "Smartcar Compatibility API (FREE, no auth)"}
+              >
+                <Database className={`h-3.5 w-3.5 ${fetchingSmartcarCatalog ? "animate-pulse" : ""}`} />
+                <span className="hidden sm:inline">
+                  {fetchingSmartcarCatalog ? "Fetching..." : smartcarCatalogInfo?.available ? `Smartcar (${smartcarCatalogInfo.totalVehicles})` : "Smartcar Catalog"}
+                </span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={smartcarConnected ? loadSmartcarVehicles : connectSmartcar}
                 disabled={smartcarLoading}
                 className={`gap-1.5 ${
@@ -592,6 +677,7 @@ export default function Home() {
                     ? "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950"
                     : "border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950"
                 }`}
+                title="Connect your real vehicle via Smartcar OAuth to see live data (odometer, battery, etc.)"
               >
                 {smartcarConnected ? (
                   <>
@@ -875,7 +961,7 @@ export default function Home() {
                 ? "Seeding the database with sample car data and fetching from NHTSA API..."
                 : fetchingNHTSA
                 ? "Fetching car models from NHTSA API (this may take a minute)..."
-                : "Load data from NHTSA (US brands), CarAPIs (BYD, Polestar, Tesla + Global), or CarNewsChina (Chinese EVs)."}
+                : "Load data from NHTSA (US brands), CarAPIs (BYD, Polestar, Tesla + Global), CarNewsChina (Chinese EVs), or Smartcar (1,464 vehicles, FREE)."}
             </p>
             {!seeding && !fetchingNHTSA && !fetchingCNC && (
               <div className="flex gap-3 flex-wrap justify-center">
@@ -887,6 +973,9 @@ export default function Home() {
                 </Button>
                 <Button onClick={() => fetchCarNewsChina(true)} disabled={fetchingCNC} className="bg-emerald-600 hover:bg-emerald-700">
                   Fetch Chinese EVs (CarNewsChina)
+                </Button>
+                <Button onClick={fetchSmartcarCatalog} disabled={fetchingSmartcarCatalog} className="bg-violet-600 hover:bg-violet-700">
+                  Smartcar Catalog (FREE)
                 </Button>
               </div>
             )}
@@ -1103,7 +1192,7 @@ export default function Home() {
                 Last updated: {new Date(lastUpdated).toLocaleString()}
               </span>
             )}
-            <span>Data: NHTSA vPIC + CarAPIs (Global) + CarNewsChina (Chinese EVs) + Smartcar (Connected)</span>
+            <span>Data: NHTSA vPIC + CarAPIs (Global) + CarNewsChina (Chinese EVs) + Smartcar (Catalog + Connected)</span>
           </div>
         </div>
       </footer>
