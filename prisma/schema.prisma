@@ -3,31 +3,32 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model CarModel {
-  id           String   @id @default(cuid())
-  brand        String
-  model        String
-  type         String   // Sedan, SUV, Truck, Hatchback, Coupe, Convertible, Van, Wagon
-  year         Int
-  engine       String?
-  fuelType     String?  // Gasoline, Diesel, Electric, Hybrid
-  transmission String?  // Automatic, Manual, CVT
-  horsepower   Int?
-  torque       Int?
-  drivetrain   String?  // FWD, RWD, AWD, 4WD
+  id              String   @id @default(cuid())
+  brand           String
+  model           String
+  type            String   // Sedan, SUV, Truck, Hatchback, Coupe, Convertible, Van, Wagon
+  year            Int
+  engine          String?
+  fuelType        String?  // Gasoline, Diesel, Electric, Hybrid
+  transmission    String?  // Automatic, Manual, CVT
+  horsepower      Int?
+  torque          Int?
+  drivetrain      String?  // FWD, RWD, AWD, 4WD
   seatingCapacity Int?
-  price        Float?
-  imageUrl     String?
-  color        String?
-  bodyStyle    String?
-  mpgCity      Int?
-  mpgHighway   Int?
+  price           Float?
+  imageUrl        String?
+  color           String?
+  bodyStyle       String?
+  mpgCity         Int?
+  mpgHighway      Int?
   // CarAPIs extended fields
-  source       String?  // "nhtsa", "carnewschina", "carapis"
+  source       String?  // "nhtsa", "carnewschina", "carapis", "smartcar"
   externalId   String?  // ID from the external API
   trim         String?  // Trim level
   region       String?  // Region/market
@@ -37,4 +38,10 @@ model CarModel {
   hasAccident  Boolean?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([brand])
+  @@index([model])
+  @@index([year])
+  @@index([type])
+  @@index([fuelType])
 }
