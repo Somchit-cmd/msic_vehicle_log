@@ -1,11 +1,15 @@
 // Smartcar API Integration Service
-// Smartcar provides connected vehicle data through OAuth 2.0
-// Users connect their vehicles via Smartcar Connect, then we can read live data
+// Two features:
+// 1. Compatibility API (FREE, no auth) — lists compatible vehicles for catalog data
+// 2. Connected Vehicle (OAuth2) — live data from a real connected vehicle
 // Docs: https://smartcar.com/docs
 
 import Smartcar from "smartcar";
 
-// Types for Smartcar vehicle data
+// ============================================
+// Types
+// ============================================
+
 interface SmartcarVehicleData {
   id: string;
   make: string;
@@ -14,9 +18,9 @@ interface SmartcarVehicleData {
   vin?: string;
   odometer?: number;
   odometerUnit?: string;
-  fuel?: number; // percent remaining
-  battery?: number; // percent remaining
-  batteryCapacity?: number; // kWh
+  fuel?: number;
+  battery?: number;
+  batteryCapacity?: number;
   charging?: boolean;
   chargeLimit?: number;
   engineOil?: { lifeRemaining: number };
@@ -37,15 +41,121 @@ interface SmartcarTokens {
   refreshExpiration: number;
 }
 
-// Get Smartcar AuthClient
+// Compatibility API response types (JSON:API format)
+interface CompatibleVehicleAttributes {
+  make: string;
+  model: string;
+  years: { start: number; end: number };
+  powertrainType: string; // "ICE", "BEV", "PHEV", "HEV"
+  region: string; // "US", "EU", etc.
+  capabilities: Array<{
+    type: string;
+    name: string;
+    group: string;
+    code: string;
+    capability: string;
+    permission: string;
+  }>;
+}
+
+interface CompatibleVehicleEntry {
+  id: string;
+  type: "vehicle-model-capability";
+  attributes: CompatibleVehicleAttributes;
+}
+
+interface CompatibilityApiResponse {
+  data: CompatibleVehicleEntry[];
+  meta: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+  };
+  links?: {
+    self?: string;
+    next?: string;
+    prev?: string;
+  };
+}
+
+// ============================================
+// Feature 1: Compatibility API (FREE, No Auth)
+// Fetches list of compatible vehicles for catalog data
+// ============================================
+
+const COMPATIBILITY_API_BASE = "https://compatibility.api.smartcar.com/v3";
+
+/**
+ * Fetch compatible vehicles from Smartcar's Compatibility API.
+ * This is a FREE, PUBLIC endpoint — no authentication required.
+ * Returns vehicle make, model, year range, powertrain type, and region.
+ *
+ * The API returns ALL vehicles in one response (default pageSize = totalCount).
+ */
+export async function fetchCompatibleVehicles(): Promise<CompatibilityApiResponse> {
+  const url = `${COMPATIBILITY_API_BASE}/compatible-vehicles`;
+  console.log(`[Smartcar] Fetching compatible vehicles from: ${url}`);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "application/json",
+    },
+    signal: AbortSignal.timeout(30000), // 30s timeout
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[Smartcar] Compatibility API error: ${response.status}`, errorText);
+    throw new Error(`Smartcar Compatibility API returned ${response.status}: ${errorText}`);
+  }
+
+  const data: CompatibilityApiResponse = await response.json();
+  console.log(`[Smartcar] Got ${data.data?.length || 0} vehicles (total: ${data.meta?.totalCount || 0})`);
+  return data;
+}
+
+/**
+ * Fetch ALL compatible vehicles.
+ * The API returns all vehicles in one response, so no pagination needed.
+ */
+export async function fetchAllCompatibleVehicles(): Promise<CompatibleVehicleEntry[]> {
+  const response = await fetchCompatibleVehicles();
+  return response.data || [];
+}
+
+/**
+ * Get the total count of available vehicles in the Compatibility API.
+ */
+export async function getCompatibilityCount(): Promise<number> {
+  try {
+    const response = await fetchCompatibleVehicles();
+    return response.meta?.totalCount || response.data?.length || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ============================================
+// Feature 2: Connected Vehicle (OAuth2)
+// Requires vehicle owner to authorize via Smartcar Connect
+// ============================================
+
+/**
+ * Get Smartcar AuthClient for OAuth2 Connect flow.
+ */
 export function getSmartcarClient(): Smartcar.AuthClient {
   const clientId = process.env.SMARTCAR_CLIENT_ID;
   const clientSecret = process.env.SMARTCAR_CLIENT_SECRET;
-  const redirectUri = process.env.SMARTCAR_REDIRECT_URI || "http://localhost:3000/api/cars/smartcar/callback";
+  const redirectUri =
+    process.env.SMARTCAR_REDIRECT_URI ||
+    "http://localhost:3000/api/cars/smartcar/callback";
   const mode = (process.env.SMARTCAR_MODE as "test" | "live") || "test";
 
   if (!clientId || !clientSecret) {
-    throw new Error("SMARTCAR_CLIENT_ID and SMARTCAR_CLIENT_SECRET environment variables are not set");
+    throw new Error(
+      "SMARTCAR_CLIENT_ID and SMARTCAR_CLIENT_SECRET environment variables are not set"
+    );
   }
 
   return new Smartcar.AuthClient({
@@ -56,7 +166,9 @@ export function getSmartcarClient(): Smartcar.AuthClient {
   });
 }
 
-// Get Smartcar Connect URL - users authorize their vehicles through this
+/**
+ * Get Smartcar Connect URL — users authorize their vehicles through this.
+ */
 export function getConnectUrl(scope?: string[]): string {
   const client = getSmartcarClient();
   const defaultScope = [
@@ -75,7 +187,9 @@ export function getConnectUrl(scope?: string[]): string {
   });
 }
 
-// Exchange authorization code for access token
+/**
+ * Exchange authorization code for access token.
+ */
 export async function exchangeCode(code: string): Promise<SmartcarTokens> {
   const client = getSmartcarClient();
   const auth = await client.exchangeCode(code);
@@ -88,8 +202,12 @@ export async function exchangeCode(code: string): Promise<SmartcarTokens> {
   };
 }
 
-// Refresh an expired access token
-export async function refreshAccessToken(refreshToken: string): Promise<SmartcarTokens> {
+/**
+ * Refresh an expired access token.
+ */
+export async function refreshAccessToken(
+  refreshToken: string
+): Promise<SmartcarTokens> {
   const client = getSmartcarClient();
   const auth = await client.exchangeRefreshToken(refreshToken);
 
@@ -101,14 +219,23 @@ export async function refreshAccessToken(refreshToken: string): Promise<Smartcar
   };
 }
 
-// Get all connected vehicle IDs
-export async function getConnectedVehicleIds(accessToken: string): Promise<string[]> {
+/**
+ * Get all connected vehicle IDs.
+ */
+export async function getConnectedVehicleIds(
+  accessToken: string
+): Promise<string[]> {
   const vehicles = await Smartcar.getVehicles(accessToken);
   return vehicles.vehicles;
 }
 
-// Get vehicle attributes (make, model, year)
-export async function getVehicleAttributes(vehicleId: string, accessToken: string): Promise<{
+/**
+ * Get vehicle attributes (make, model, year).
+ */
+export async function getVehicleAttributes(
+  vehicleId: string,
+  accessToken: string
+): Promise<{
   id: string;
   make: string;
   model: string;
@@ -124,7 +251,9 @@ export async function getVehicleAttributes(vehicleId: string, accessToken: strin
   };
 }
 
-// Get full vehicle data from all Smartcar endpoints
+/**
+ * Get full vehicle data from all Smartcar endpoints.
+ */
 export async function getFullVehicleData(
   vehicleId: string,
   accessToken: string
@@ -199,14 +328,24 @@ export async function getFullVehicleData(
   return data;
 }
 
-// Get vehicle VIN
-export async function getVehicleVin(vehicleId: string, accessToken: string): Promise<string> {
+/**
+ * Get vehicle VIN.
+ */
+export async function getVehicleVin(
+  vehicleId: string,
+  accessToken: string
+): Promise<string> {
   const vehicle = new Smartcar.Vehicle(vehicleId, accessToken);
   const vin = await vehicle.vin();
   return vin;
 }
 
-// Check if Smartcar is configured
+/**
+ * Check if Smartcar OAuth is configured.
+ */
 export function isSmartcarConfigured(): boolean {
-  return !!(process.env.SMARTCAR_CLIENT_ID && process.env.SMARTCAR_CLIENT_SECRET);
+  return !!(
+    process.env.SMARTCAR_CLIENT_ID &&
+    process.env.SMARTCAR_CLIENT_SECRET
+  );
 }

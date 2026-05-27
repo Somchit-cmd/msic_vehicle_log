@@ -1,30 +1,27 @@
+# Worklog
+
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Integrate CarAPIs.com API into AutoCatalog website
+Task: Integrate Smartcar API with the car catalog website
 
 Work Log:
-- Explored CarAPIs.com API structure: vehicles endpoint with brand, model, trim, year, fuel_type, body_type, photos, price, region, etc.
-- Discovered API has 1,813+ unique vehicles from 49 brands including BYD, Polestar, Tesla
-- API uses Bearer token authentication with user-provided key
-- Updated Prisma schema to add: source, externalId, trim, region, sellerType, mileage, isNewVehicle, hasAccident fields
-- Created CarAPIs service at /src/lib/services/carapis-service.ts with full and quick fetch modes
-- Created API route at /src/app/api/cars/fetch-carapis/route.ts (POST for full, GET for quick)
-- Updated UI page.tsx: added CarAPIs fetch button (blue), updated CarModel interface with new fields
-- Updated empty state with CarAPIs option, updated detail dialog to show trim/region/mileage/source
-- Updated footer to mention all 3 data sources
-- Updated export route to include new fields in CSV/Excel exports
-- Added CARAPIS_API_KEY to .env
-- Ran prisma db push successfully, build compiles clean
-- NOTE: CarAPIs API rate-limited (429) after extensive testing - will work once rate limit resets (~23 hours)
+- Investigated Smartcar API - found it's primarily a connected vehicle API (OAuth2), NOT a catalog/specification API
+- Discovered the Smartcar Compatibility API (FREE, no auth) which provides 1,464 vehicle entries across 45 brands
+- Fixed the "400: Invalid parameter client_id" error explanation - the Smartcar Connect OAuth flow requires proper app configuration
+- Rewrote smartcar-service.ts to add Compatibility API support alongside existing Connected Vehicle features
+- Created /api/cars/fetch-smartcar route with both GET (status check) and POST (fetch data) endpoints
+- Implemented efficient batch database operations using in-memory duplicate checking and createMany
+- Updated page.tsx UI with:
+  - New "Smartcar Catalog" button (violet, with Database icon) for fetching Compatibility API data
+  - Improved "Connect Car" button error handling with helpful hints
+  - Smartcar catalog availability check on page load
+  - Smartcar catalog option in empty state
+- Tested the Smartcar Compatibility API: successfully fetched 1,464 vehicle entries → expanded to 4,188 new models in DB
+- Database now has 5,635 total car models from 96 brands
 
 Stage Summary:
-- Database currently has 1,447 vehicles from 74 brands including 19 Chinese brands (BYD: 42, NIO, XPeng, Zeekr, etc.)
-- CarAPIs integration code is complete and tested (builds clean, endpoint works but API is rate-limited)
-- Key files created/modified:
-  - /src/lib/services/carapis-service.ts (new)
-  - /src/app/api/cars/fetch-carapis/route.ts (new)
-  - /prisma/schema.prisma (updated with new fields)
-  - /src/app/page.tsx (updated UI with CarAPIs button + new fields)
-  - /src/app/api/cars/export/route.ts (updated with new export fields)
-  - /.env (added CARAPIS_API_KEY)
+- Smartcar Compatibility API integrated (FREE, no auth required, 1,464 entries / 45 brands)
+- Smartcar Connected Vehicle (OAuth2) feature preserved with better error handling
+- The "400: Invalid parameter client_id" error is due to Smartcar Connect OAuth configuration - the client_id may need to be validated in the Smartcar dashboard, or the redirect URI needs to match
+- Key finding: Smartcar is NOT a catalog API - it's for reading live data from real connected vehicles. The Compatibility API only provides make/model/year/powertrain/region, no detailed specs
