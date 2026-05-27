@@ -23,6 +23,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -55,6 +57,9 @@ import {
   ArrowUpDown,
   Clock,
   Database,
+  Settings,
+  Globe,
+  Link,
 } from "lucide-react";
 
 interface CarModel {
@@ -617,80 +622,83 @@ export default function Home() {
                   Updated: {new Date(lastUpdated).toLocaleString()}
                 </div>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchNHTSAData}
-                disabled={fetchingNHTSA || refreshing}
-                className="gap-1.5"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${fetchingNHTSA ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Fetch from NHTSA</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fetchCarAPIsData(true)}
-                disabled={fetchingCarAPIs || carApisStatus === "rate_limited"}
-                className={`gap-1.5 ${
-                  carApisStatus === "rate_limited"
-                    ? "border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 opacity-70"
-                    : "border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950"
-                }`}
-                title={carApisStatus === "rate_limited" && carApisRetryMinutes ? `Rate limited - try again in ${carApisRetryMinutes} min` : "Fetch from CarAPIs"}
-              >
-                <Zap className={`h-3.5 w-3.5 ${fetchingCarAPIs ? "animate-pulse" : ""}`} />
-                <span className="hidden sm:inline">
-                  {fetchingCarAPIs ? "Fetching..." : carApisStatus === "rate_limited" ? `Rate Limited (${carApisRetryMinutes}m)` : "CarAPIs (BYD+Global)"}
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fetchCarNewsChina(true)}
-                disabled={fetchingCNC}
-                className="gap-1.5 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950"
-              >
-                <Car className={`h-3.5 w-3.5 ${fetchingCNC ? "animate-pulse" : ""}`} />
-                <span className="hidden sm:inline">{fetchingCNC ? cncProgress || "Fetching..." : "Chinese EVs"}</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchSmartcarCatalog}
-                disabled={fetchingSmartcarCatalog}
-                className="gap-1.5 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950"
-                title={smartcarCatalogInfo ? `Smartcar Compatibility API — ${smartcarCatalogInfo.totalVehicles} vehicles available (FREE, no auth)` : "Smartcar Compatibility API (FREE, no auth)"}
-              >
-                <Database className={`h-3.5 w-3.5 ${fetchingSmartcarCatalog ? "animate-pulse" : ""}`} />
-                <span className="hidden sm:inline">
-                  {fetchingSmartcarCatalog ? "Fetching..." : smartcarCatalogInfo?.available ? `Smartcar (${smartcarCatalogInfo.totalVehicles})` : "Smartcar Catalog"}
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={smartcarConnected ? loadSmartcarVehicles : connectSmartcar}
-                disabled={smartcarLoading}
-                className={`gap-1.5 ${
-                  smartcarConnected
-                    ? "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950"
-                    : "border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950"
-                }`}
-                title="Connect your real vehicle via Smartcar OAuth to see live data (odometer, battery, etc.)"
-              >
-                {smartcarConnected ? (
-                  <>
-                    <Zap className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">{smartcarLoading ? "Loading..." : "My Vehicle"}</span>
-                  </>
-                ) : (
-                  <>
-                    <Car className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Connect Car</span>
-                  </>
-                )}
-              </Button>
+              {/* Settings Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5 border-slate-300 dark:border-slate-700">
+                    <Settings className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Data Sources</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel className="text-xs text-slate-500">Fetch & Update Data</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={fetchNHTSAData}
+                    disabled={fetchingNHTSA || refreshing}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <RefreshCw className={`h-4 w-4 text-slate-500 ${fetchingNHTSA ? "animate-spin" : ""}`} />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">Fetch from NHTSA</span>
+                      <span className="text-xs text-slate-500">US market vehicles from vPIC API</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => fetchCarAPIsData(true)}
+                    disabled={fetchingCarAPIs || carApisStatus === "rate_limited"}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <Zap className={`h-4 w-4 text-blue-500 ${fetchingCarAPIs ? "animate-pulse" : ""}`} />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">
+                        {fetchingCarAPIs ? "Fetching..." : carApisStatus === "rate_limited" ? `Rate Limited (${carApisRetryMinutes}m)` : "CarAPIs (BYD + Global)"}
+                      </span>
+                      <span className="text-xs text-slate-500">Global market incl. BYD, Tesla, Polestar</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => fetchCarNewsChina(true)}
+                    disabled={fetchingCNC}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <Globe className={`h-4 w-4 text-emerald-500 ${fetchingCNC ? "animate-pulse" : ""}`} />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">{fetchingCNC ? cncProgress || "Fetching..." : "Chinese EVs"}</span>
+                      <span className="text-xs text-slate-500">BYD, NIO, XPeng, Zeekr and more</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={fetchSmartcarCatalog}
+                    disabled={fetchingSmartcarCatalog}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <Database className={`h-4 w-4 text-violet-500 ${fetchingSmartcarCatalog ? "animate-pulse" : ""}`} />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">
+                        {fetchingSmartcarCatalog ? "Fetching..." : smartcarCatalogInfo?.available ? `Smartcar Catalog (${smartcarCatalogInfo.totalVehicles})` : "Smartcar Catalog"}
+                      </span>
+                      <span className="text-xs text-slate-500">1,464 vehicles, FREE, no auth required</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-slate-500">Connected Vehicles</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={smartcarConnected ? loadSmartcarVehicles : connectSmartcar}
+                    disabled={smartcarLoading}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <Link className="h-4 w-4 text-purple-500" />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">
+                        {smartcarConnected ? (smartcarLoading ? "Loading..." : "My Connected Vehicle") : "Connect Your Car"}
+                      </span>
+                      <span className="text-xs text-slate-500">Smartcar OAuth — live odometer, battery & more</span>
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {/* Export Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-1.5">
