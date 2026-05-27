@@ -221,9 +221,30 @@ export default function Home() {
     }
   };
 
+  const [carApisStatus, setCarApisStatus] = useState<"unknown" | "available" | "rate_limited">("unknown");
+  const [carApisRetryMinutes, setCarApisRetryMinutes] = useState<number | null>(null);
+
   const fetchCarAPIsData = async (fullFetch = true) => {
     setFetchingCarAPIs(true);
     try {
+      // First check if the API is available (not rate-limited)
+      const statusRes = await fetch("/api/cars/fetch-carapis/status");
+      const statusData = await statusRes.json();
+
+      if (!statusData.available) {
+        setCarApisStatus("rate_limited");
+        setCarApisRetryMinutes(statusData.retryAfterMinutes || null);
+        toast({
+          title: "CarAPIs Rate Limited",
+          description: statusData.message || "API is rate-limited. Please wait before trying again.",
+          variant: "destructive",
+        });
+        setFetchingCarAPIs(false);
+        return;
+      }
+
+      setCarApisStatus("available");
+
       const res = fullFetch
         ? await fetch("/api/cars/fetch-carapis", {
             method: "POST",
@@ -232,6 +253,30 @@ export default function Home() {
           })
         : await fetch("/api/cars/fetch-carapis");
       const data = await res.json();
+
+      // Handle rate-limit error from CarAPIs
+      if (res.status === 429 || data.error === "rate_limited") {
+        setCarApisStatus("rate_limited");
+        setCarApisRetryMinutes(data.retryAfterMinutes || null);
+        toast({
+          title: "CarAPIs Rate Limited",
+          description: data.message || `API is rate-limited. Try again in ${data.retryAfterMinutes || 60} minutes.`,
+          variant: "destructive",
+        });
+        setFetchingCarAPIs(false);
+        return;
+      }
+
+      if (data.error) {
+        toast({
+          title: "CarAPIs Error",
+          description: data.message || data.details || "Failed to fetch from CarAPIs",
+          variant: "destructive",
+        });
+        setFetchingCarAPIs(false);
+        return;
+      }
+
       toast({
         title: "CarAPIs Fetch Complete!",
         description: `Fetched ${data.totalFetched} vehicles from ${data.brandCount} brands (incl. BYD, Polestar, Tesla). Added ${data.totalAdded} new, updated ${data.totalUpdated}.`,
@@ -429,11 +474,18 @@ export default function Home() {
                 variant="outline"
                 size="sm"
                 onClick={() => fetchCarAPIsData(true)}
-                disabled={fetchingCarAPIs}
-                className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950"
+                disabled={fetchingCarAPIs || carApisStatus === "rate_limited"}
+                className={`gap-1.5 ${
+                  carApisStatus === "rate_limited"
+                    ? "border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 opacity-70"
+                    : "border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950"
+                }`}
+                title={carApisStatus === "rate_limited" && carApisRetryMinutes ? `Rate limited - try again in ${carApisRetryMinutes} min` : "Fetch from CarAPIs"}
               >
                 <Zap className={`h-3.5 w-3.5 ${fetchingCarAPIs ? "animate-pulse" : ""}`} />
-                <span className="hidden sm:inline">{fetchingCarAPIs ? "Fetching..." : "CarAPIs (BYD+Global)"}</span>
+                <span className="hidden sm:inline">
+                  {fetchingCarAPIs ? "Fetching..." : carApisStatus === "rate_limited" ? `Rate Limited (${carApisRetryMinutes}m)` : "CarAPIs (BYD+Global)"}
+                </span>
               </Button>
               <Button
                 variant="outline"

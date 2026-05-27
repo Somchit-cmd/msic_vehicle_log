@@ -143,6 +143,67 @@ function getApiKey(): string {
   return key;
 }
 
+// Custom error for throttle/rate-limit
+export class CarAPIsThrottleError extends Error {
+  retryAfterSeconds: number;
+  constructor(retryAfterSeconds: number) {
+    super(`CarAPIs rate limited. Try again in ${Math.ceil(retryAfterSeconds / 60)} minutes.`);
+    this.name = "CarAPIsThrottleError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+// Check if CarAPIs is available (not rate-limited) - makes 1 lightweight request
+export async function checkCarAPIsStatus(): Promise<{
+  available: boolean;
+  retryAfterSeconds?: number;
+  retryAfterMinutes?: number;
+  totalVehicles?: number;
+  message: string;
+}> {
+  try {
+    const params = new URLSearchParams({
+      page: "1",
+      page_size: "1",
+      available_only: "false",
+    });
+
+    const url = `${CARAPIS_BASE}/vehicles/?${params.toString()}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${getApiKey()}`,
+        Accept: "application/json",
+      },
+      next: { revalidate: 0 },
+    });
+
+    const data = await res.json();
+
+    // Check for throttle response
+    if (data.detail && typeof data.detail === "string" && data.detail.includes("throttled")) {
+      const match = data.detail.match(/available in (\d+) seconds/);
+      const retryAfter = match ? parseInt(match[1]) : 3600;
+      return {
+        available: false,
+        retryAfterSeconds: retryAfter,
+        retryAfterMinutes: Math.ceil(retryAfter / 60),
+        message: `CarAPIs is rate-limited. Try again in ${Math.ceil(retryAfter / 60)} minutes.`,
+      };
+    }
+
+    return {
+      available: true,
+      totalVehicles: data.count || 0,
+      message: `CarAPIs is available. ~${data.count || 0} vehicles in database.`,
+    };
+  } catch (err) {
+    return {
+      available: false,
+      message: `Failed to check CarAPIs status: ${err}`,
+    };
+  }
+}
+
 // Fetch a single page of vehicles from CarAPIs
 async function fetchVehiclePage(
   page: number,
@@ -177,8 +238,19 @@ async function fetchVehiclePage(
       return null;
     }
 
-    return await res.json();
+    const data = await res.json();
+
+    // Check for throttle/rate-limit response
+    if (data.detail && typeof data.detail === "string" && data.detail.includes("throttled")) {
+      const match = data.detail.match(/available in (\d+) seconds/);
+      const retryAfter = match ? parseInt(match[1]) : 3600;
+      console.error(`[CarAPIs] Rate limited! Retry after ${retryAfter} seconds.`);
+      throw new CarAPIsThrottleError(retryAfter);
+    }
+
+    return data;
   } catch (err) {
+    if (err instanceof CarAPIsThrottleError) throw err;
     console.error(`[CarAPIs] Error fetching page ${page}:`, err);
     return null;
   }
@@ -225,8 +297,8 @@ async function fetchAllVehicles(
     hasMore = data.has_next;
     page++;
 
-    // Rate limiting: wait between requests
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Rate limiting: wait between requests (1 second to avoid throttling)
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
   return allVehicles;
@@ -308,7 +380,7 @@ async function storeVehicle(
 }
 
 // Main function: Fetch and store all vehicles from CarAPIs
-// Strategy: Fetch by different fuel types and body types to maximize coverage
+// Conservative strategy: only fetch a few key categories to avoid rate-limiting
 export async function fetchAndStoreCarAPIsData(
   options: {
     maxPages?: number;
@@ -321,88 +393,65 @@ export async function fetchAndStoreCarAPIsData(
   brands: string[];
   errors: string[];
 }> {
-  const { maxPages = 20, fetchByCategory = true } = options;
+  const { maxPages = 2 } = options;
 
   const errors: string[] = [];
   let totalFetched = 0;
   let totalAdded = 0;
   let totalUpdated = 0;
   const brandsSet = new Set<string>();
+  const allVehicles = new Map<string, CarAPIsVehicle>();
 
-  console.log("[CarAPIs] Starting data fetch...");
+  console.log("[CarAPIs] Starting data fetch (conservative mode to avoid rate limits)...");
 
-  // First, fetch the default list (mixed vehicles)
-  const defaultVehicles = await fetchAllVehicles({ maxPages: 1 });
-  console.log(`[CarAPIs] Default fetch: ${defaultVehicles.length} vehicles`);
-
-  if (fetchByCategory) {
-    // Fetch by fuel type to get more coverage
-    const fuelTypes = ["electric", "hybrid", "diesel", "gasoline"];
-    const bodyTypes = ["sedan", "suv", "hatchback", "coupe", "convertible", "minivan", "pickup", "wagon", "van"];
-
-    const allVehicles = new Map<string, CarAPIsVehicle>();
-
-    // Add default vehicles
+  // Step 1: Fetch default list (mixed vehicles) - 1 page only
+  try {
+    const defaultVehicles = await fetchAllVehicles({ maxPages: 1 });
     for (const v of defaultVehicles) {
       allVehicles.set(v.id, v);
     }
+    console.log(`[CarAPIs] Default fetch: ${defaultVehicles.length} vehicles`);
+  } catch (err) {
+    if (err instanceof CarAPIsThrottleError) throw err;
+    errors.push(`Default fetch failed: ${err}`);
+  }
 
-    // Fetch by fuel type
-    for (const ft of fuelTypes) {
-      try {
-        const vehicles = await fetchAllVehicles({ fuelType: ft, maxPages: 2 });
-        for (const v of vehicles) {
-          if (!allVehicles.has(v.id)) {
-            allVehicles.set(v.id, v);
-          }
-        }
-        console.log(`[CarAPIs] Fuel type "${ft}": ${vehicles.length} vehicles`);
-      } catch (err) {
-        errors.push(`Failed to fetch fuel type ${ft}: ${err}`);
-      }
+  // Step 2: Fetch electric vehicles (includes BYD, Tesla, NIO, etc.) - most important
+  try {
+    const electricVehicles = await fetchAllVehicles({ fuelType: "electric", maxPages });
+    for (const v of electricVehicles) {
+      if (!allVehicles.has(v.id)) allVehicles.set(v.id, v);
     }
+    console.log(`[CarAPIs] Electric: ${electricVehicles.length} vehicles`);
+  } catch (err) {
+    if (err instanceof CarAPIsThrottleError) throw err;
+    errors.push(`Electric fetch failed: ${err}`);
+  }
 
-    // Fetch by body type
-    for (const bt of bodyTypes) {
-      try {
-        const vehicles = await fetchAllVehicles({ bodyType: bt, maxPages: 2 });
-        for (const v of vehicles) {
-          if (!allVehicles.has(v.id)) {
-            allVehicles.set(v.id, v);
-          }
-        }
-        console.log(`[CarAPIs] Body type "${bt}": ${vehicles.length} vehicles`);
-      } catch (err) {
-        errors.push(`Failed to fetch body type ${bt}: ${err}`);
-      }
+  // Step 3: Fetch SUVs - popular category
+  try {
+    const suvVehicles = await fetchAllVehicles({ bodyType: "suv", maxPages: 1 });
+    for (const v of suvVehicles) {
+      if (!allVehicles.has(v.id)) allVehicles.set(v.id, v);
     }
+    console.log(`[CarAPIs] SUV: ${suvVehicles.length} vehicles`);
+  } catch (err) {
+    if (err instanceof CarAPIsThrottleError) throw err;
+    errors.push(`SUV fetch failed: ${err}`);
+  }
 
-    console.log(`[CarAPIs] Total unique vehicles: ${allVehicles.size}`);
+  console.log(`[CarAPIs] Total unique vehicles: ${allVehicles.size}`);
 
-    // Store all vehicles
-    for (const vehicle of allVehicles.values()) {
-      try {
-        totalFetched++;
-        brandsSet.add(vehicle.brand_name);
-        const result = await storeVehicle(vehicle);
-        if (result.added) totalAdded++;
-        if (result.updated) totalUpdated++;
-      } catch (err) {
-        errors.push(`Failed to store vehicle ${vehicle.id}: ${err}`);
-      }
-    }
-  } else {
-    // Simple mode: just fetch the default list
-    for (const vehicle of defaultVehicles) {
-      try {
-        totalFetched++;
-        brandsSet.add(vehicle.brand_name);
-        const result = await storeVehicle(vehicle);
-        if (result.added) totalAdded++;
-        if (result.updated) totalUpdated++;
-      } catch (err) {
-        errors.push(`Failed to store vehicle ${vehicle.id}: ${err}`);
-      }
+  // Store all vehicles
+  for (const vehicle of allVehicles.values()) {
+    try {
+      totalFetched++;
+      brandsSet.add(vehicle.brand_name);
+      const result = await storeVehicle(vehicle);
+      if (result.added) totalAdded++;
+      if (result.updated) totalUpdated++;
+    } catch (err) {
+      errors.push(`Failed to store vehicle ${vehicle.id}: ${err}`);
     }
   }
 
