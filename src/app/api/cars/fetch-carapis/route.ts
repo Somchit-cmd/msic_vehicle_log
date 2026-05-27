@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   fetchAndStoreCarAPIsData,
   quickFetchCarAPIsData,
+  CarAPIsThrottleError,
 } from "@/lib/services/carapis-service";
 
 // Full CarAPIs fetch - fetches vehicles across all categories
@@ -26,6 +27,19 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
+    // Handle rate-limit/throttle errors specifically
+    if (error instanceof CarAPIsThrottleError) {
+      return NextResponse.json(
+        {
+          error: "rate_limited",
+          message: `CarAPIs API is rate-limited. Please try again in ${Math.ceil(error.retryAfterSeconds / 60)} minutes (${Math.ceil(error.retryAfterSeconds / 3600)} hours).`,
+          retryAfterSeconds: error.retryAfterSeconds,
+          retryAfterMinutes: Math.ceil(error.retryAfterSeconds / 60),
+        },
+        { status: 429 }
+      );
+    }
+
     console.error("Error in CarAPIs fetch:", error);
     return NextResponse.json(
       { error: "Failed to fetch from CarAPIs", details: String(error) },
@@ -50,6 +64,19 @@ export async function GET() {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
+    // Handle rate-limit/throttle errors specifically
+    if (error instanceof CarAPIsThrottleError) {
+      return NextResponse.json(
+        {
+          error: "rate_limited",
+          message: `CarAPIs API is rate-limited. Please try again in ${Math.ceil(error.retryAfterSeconds / 60)} minutes (${Math.ceil(error.retryAfterSeconds / 3600)} hours).`,
+          retryAfterSeconds: error.retryAfterSeconds,
+          retryAfterMinutes: Math.ceil(error.retryAfterSeconds / 60),
+        },
+        { status: 429 }
+      );
+    }
+
     console.error("Error in CarAPIs quick fetch:", error);
     return NextResponse.json(
       { error: "Failed to fetch from CarAPIs", details: String(error) },
