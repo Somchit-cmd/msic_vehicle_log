@@ -124,6 +124,11 @@ export default function Home() {
   const [totalCars, setTotalCars] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
+  // Smartcar connected vehicle state
+  const [smartcarConnected, setSmartcarConnected] = useState(false);
+  const [smartcarVehicles, setSmartcarVehicles] = useState<any[]>([]);
+  const [smartcarLoading, setSmartcarLoading] = useState(false);
+
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [brandFilter, setBrandFilter] = useState("all");
@@ -337,6 +342,68 @@ export default function Home() {
     }
   };
 
+  // Smartcar: Connect vehicle via Smartcar Connect
+  const connectSmartcar = async () => {
+    try {
+      const res = await fetch("/api/cars/smartcar");
+      const data = await res.json();
+      if (data.connectUrl) {
+        // Open Smartcar Connect in a new window
+        window.open(data.connectUrl, "_blank", "width=600,height=700");
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to get Smartcar Connect URL", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to connect Smartcar", variant: "destructive" });
+    }
+  };
+
+  // Smartcar: Check connection status and load vehicle data
+  const checkSmartcarStatus = async () => {
+    try {
+      const res = await fetch("/api/cars/smartcar/status");
+      const data = await res.json();
+      setSmartcarConnected(data.connected);
+      if (data.connected) {
+        loadSmartcarVehicles();
+      }
+    } catch {
+      // silently fail
+    }
+  };
+
+  // Smartcar: Load connected vehicle data
+  const loadSmartcarVehicles = async () => {
+    setSmartcarLoading(true);
+    try {
+      const res = await fetch("/api/cars/smartcar/vehicles");
+      const data = await res.json();
+      if (data.vehicles) {
+        setSmartcarVehicles(data.vehicles);
+        setSmartcarConnected(true);
+      } else if (data.error === "not_connected" || data.error === "token_expired") {
+        setSmartcarConnected(false);
+        setSmartcarVehicles([]);
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to load connected vehicle data", variant: "destructive" });
+    } finally {
+      setSmartcarLoading(false);
+    }
+  };
+
+  // Smartcar: Disconnect vehicle
+  const disconnectSmartcar = async () => {
+    try {
+      await fetch("/api/cars/smartcar/disconnect", { method: "POST" });
+      setSmartcarConnected(false);
+      setSmartcarVehicles([]);
+      toast({ title: "Disconnected", description: "Smartcar vehicle disconnected." });
+    } catch {
+      toast({ title: "Error", description: "Failed to disconnect", variant: "destructive" });
+    }
+  };
+
   const exportData = async (format: "csv" | "excel") => {
     try {
       const params = new URLSearchParams();
@@ -366,6 +433,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchFilters();
+    checkSmartcarStatus();
   }, [fetchFilters]);
 
   useEffect(() => {
@@ -380,6 +448,23 @@ export default function Home() {
       fetchCarAPIsData(false);
     }
   }, [loading, cars.length]);
+
+  // Handle Smartcar callback redirect params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("smartcar_connected") === "true") {
+      toast({ title: "Vehicle Connected!", description: "Your vehicle is now connected via Smartcar. Click 'My Vehicle' to see live data." });
+      setSmartcarConnected(true);
+      // Clean up URL
+      window.history.replaceState({}, "", "/");
+      // Auto-load vehicle data
+      setTimeout(() => loadSmartcarVehicles(), 1000);
+    }
+    if (params.get("smartcar_error")) {
+      toast({ title: "Smartcar Error", description: params.get("smartcar_error") || "Connection failed", variant: "destructive" });
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
 
   // Daily auto-refresh: check on load and set up 24-hour interval
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -496,6 +581,29 @@ export default function Home() {
               >
                 <Car className={`h-3.5 w-3.5 ${fetchingCNC ? "animate-pulse" : ""}`} />
                 <span className="hidden sm:inline">{fetchingCNC ? cncProgress || "Fetching..." : "Chinese EVs"}</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={smartcarConnected ? loadSmartcarVehicles : connectSmartcar}
+                disabled={smartcarLoading}
+                className={`gap-1.5 ${
+                  smartcarConnected
+                    ? "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950"
+                    : "border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950"
+                }`}
+              >
+                {smartcarConnected ? (
+                  <>
+                    <Zap className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{smartcarLoading ? "Loading..." : "My Vehicle"}</span>
+                  </>
+                ) : (
+                  <>
+                    <Car className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Connect Car</span>
+                  </>
+                )}
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -643,6 +751,93 @@ export default function Home() {
             )}
           </div>
         </div>
+
+        {/* Smartcar Connected Vehicle Panel */}
+        {smartcarConnected && smartcarVehicles.length > 0 && (
+          <div className="mb-6 p-4 rounded-xl border border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/50 dark:to-purple-950/50">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                <h3 className="text-sm font-semibold text-violet-900 dark:text-violet-100">Connected Vehicle (Smartcar)</h3>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={loadSmartcarVehicles} disabled={smartcarLoading} className="h-7 text-xs">
+                  <RefreshCw className={`h-3 w-3 mr-1 ${smartcarLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+                <Button variant="ghost" size="sm" onClick={disconnectSmartcar} className="h-7 text-xs text-red-600 hover:text-red-700">
+                  Disconnect
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {smartcarVehicles.map((v: any) => (
+                <div key={v.id} className="p-3 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-violet-100 dark:border-violet-900">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-900">
+                      <Car className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {v.make} {v.model}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{v.year}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    {v.odometer != null && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Odometer</span>
+                        <span className="font-medium">{v.odometer.toLocaleString()} {v.odometerUnit || "km"}</span>
+                      </div>
+                    )}
+                    {v.fuel != null && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Fuel</span>
+                        <span className="font-medium">{Math.round(v.fuel)}%</span>
+                      </div>
+                    )}
+                    {v.battery != null && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Battery</span>
+                        <span className="font-medium">{Math.round(v.battery)}%{v.charging ? " ⚡" : ""}</span>
+                      </div>
+                    )}
+                    {v.batteryCapacity != null && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Capacity</span>
+                        <span className="font-medium">{v.batteryCapacity} kWh</span>
+                      </div>
+                    )}
+                    {v.engineOil != null && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Oil Life</span>
+                        <span className="font-medium">{Math.round(v.engineOil.lifeRemaining * 100)}%</span>
+                      </div>
+                    )}
+                    {v.isLocked != null && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Locks</span>
+                        <span className="font-medium">{v.isLocked ? "Locked" : "Unlocked"}</span>
+                      </div>
+                    )}
+                    {v.tirePressure && (
+                      <div className="flex justify-between col-span-2">
+                        <span className="text-slate-500">Tires</span>
+                        <span className="font-medium">
+                          FL:{v.tirePressure.frontLeft ?? "-"} FR:{v.tirePressure.frontRight ?? "-"} BL:{v.tirePressure.backLeft ?? "-"} BR:{v.tirePressure.backRight ?? "-"} PSI
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {v.error && (
+                    <p className="text-xs text-red-500 mt-1">{v.error}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Loading Skeleton */}
         {loading && (
@@ -908,7 +1103,7 @@ export default function Home() {
                 Last updated: {new Date(lastUpdated).toLocaleString()}
               </span>
             )}
-            <span>Data: NHTSA vPIC API + CarAPIs (BYD, Global) + CarNewsChina (Chinese EVs)</span>
+            <span>Data: NHTSA vPIC + CarAPIs (Global) + CarNewsChina (Chinese EVs) + Smartcar (Connected)</span>
           </div>
         </div>
       </footer>
