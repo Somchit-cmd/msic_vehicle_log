@@ -279,10 +279,17 @@ export async function fetchAndStoreNHTSAData(
           };
 
           if (existing) {
-            // Update with any new info
+            // Update only with fields that NHTSA actually provides
+            // Preserve existing values for fields NHTSA doesn't have (price, engine, hp, torque, etc.)
             await db.carModel.update({
               where: { id: existing.id },
-              data: carData,
+              data: {
+                type: carType,
+                fuelType: fuelType !== "Gasoline" ? fuelType : (existing.fuelType || fuelType),
+                transmission: transmission !== "Automatic" ? transmission : (existing.transmission || transmission),
+                drivetrain: drivetrain !== "FWD" ? drivetrain : (existing.drivetrain || drivetrain),
+                imageUrl: existing.imageUrl || carData.imageUrl,
+              },
             });
             totalUpdated++;
           } else {
@@ -390,9 +397,17 @@ export async function quickFetchNHTSAData(
           };
 
           if (existing) {
+            // Update only with fields that NHTSA actually provides
+            // Preserve existing values for fields NHTSA doesn't have (price, engine, hp, torque, etc.)
             await db.carModel.update({
               where: { id: existing.id },
-              data: carData,
+              data: {
+                type: carType,
+                fuelType: fuelType !== "Gasoline" ? fuelType : (existing.fuelType || fuelType),
+                transmission: transmission !== "Automatic" ? transmission : (existing.transmission || transmission),
+                drivetrain: drivetrain !== "FWD" ? drivetrain : (existing.drivetrain || drivetrain),
+                imageUrl: existing.imageUrl || carData.imageUrl,
+              },
             });
             totalUpdated++;
           } else {

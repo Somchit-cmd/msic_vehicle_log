@@ -477,6 +477,7 @@ export async function fetchAndStoreCarNewsChinaData(
       drivetrain,
       seatingCapacity: seats,
       price,
+      priceEstimated: price ? false : null,
       imageUrl,
       color: specs?.chineseName || null,
       bodyStyle: specs?.bodyType || null,
@@ -485,10 +486,18 @@ export async function fetchAndStoreCarNewsChinaData(
     };
 
     if (existing) {
-      // Only update if the new data has more info
+      // Merge data: only overwrite with non-null values from new data
+      // Preserve existing values for fields that CNC doesn't have specs for
+      const updateData: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(carData)) {
+        if (value !== null && value !== undefined) {
+          updateData[key] = value;
+        }
+        // If new value is null, preserve the existing value (don't overwrite)
+      }
       await db.carModel.update({
         where: { id: existing.id },
-        data: carData,
+        data: updateData,
       });
       totalUpdated++;
     } else {
@@ -592,9 +601,18 @@ export async function quickFetchCarNewsChinaData(): Promise<{
         };
 
         if (existing) {
+          // Only update fields that have non-null values
+          // Preserve existing price, engine, etc. when quick fetch has no specs
+          const updateData: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(carData)) {
+            if (value !== null && value !== undefined) {
+              updateData[key] = value;
+            }
+            // If new value is null, preserve the existing value (don't overwrite)
+          }
           await db.carModel.update({
             where: { id: existing.id },
-            data: carData,
+            data: updateData,
           });
           totalUpdated++;
         } else {

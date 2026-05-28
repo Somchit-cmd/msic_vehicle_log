@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     // First, get all existing cars to do in-memory duplicate checking (much faster)
     const existingCars = await prisma.carModel.findMany({
-      select: { id: true, brand: true, model: true, year: true, externalId: true, fuelType: true, region: true },
+      select: { id: true, brand: true, model: true, year: true, externalId: true, fuelType: true, region: true, price: true, engine: true, horsepower: true, torque: true, seatingCapacity: true, imageUrl: true, color: true, bodyStyle: true, mpgCity: true, mpgHighway: true },
     });
 
     // Build lookup maps for fast duplicate checking
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       source: string;
       externalId: string;
     }> = [];
+    const toUpdate: Array<{ id: string; data: Record<string, unknown> }> = [];
 
     // Process all vehicles in memory first
     for (const v of vehicles) {
@@ -97,6 +98,15 @@ export async function POST(request: NextRequest) {
 
           // Check by externalId first
           if (externalIdMap.has(externalId)) {
+            // Update existing record with Smartcar data, but preserve existing non-null values
+            const existingRec = externalIdMap.get(externalId)!;
+            const updateData: Record<string, unknown> = {};
+            if (fuelType && !existingRec.fuelType) updateData.fuelType = fuelType;
+            if (attrs.region && !existingRec.region) updateData.region = attrs.region;
+            if (carType !== "Sedan" || !existingRec.type) updateData.type = carType;
+            if (Object.keys(updateData).length > 0 && existingRec.id !== "new") {
+              toUpdate.push({ id: existingRec.id, data: updateData });
+            }
             totalUpdated++;
             continue;
           }
@@ -104,7 +114,15 @@ export async function POST(request: NextRequest) {
           // Check for duplicate by brand+model+year
           const key = `${attrs.make}|${attrs.model}|${year}`;
           if (brandModelYearMap.has(key)) {
-            // Will update this existing record
+            // Update existing record with Smartcar data, but preserve existing non-null values
+            const existingRec = brandModelYearMap.get(key)!;
+            const updateData: Record<string, unknown> = {};
+            if (fuelType && !existingRec.fuelType) updateData.fuelType = fuelType;
+            if (attrs.region && !existingRec.region) updateData.region = attrs.region;
+            if (carType !== "Sedan" || !existingRec.type) updateData.type = carType;
+            if (Object.keys(updateData).length > 0 && existingRec.id !== "new") {
+              toUpdate.push({ id: existingRec.id, data: updateData });
+            }
             totalUpdated++;
             continue;
           }
@@ -128,6 +146,18 @@ export async function POST(request: NextRequest) {
         }
       } catch (err) {
         console.error(`[Smartcar] Error processing ${v.attributes.make} ${v.attributes.model}:`, err);
+      }
+    }
+
+    // Batch update existing records with Smartcar-only data (preserves existing values)
+    if (toUpdate.length > 0) {
+      console.log(`[Smartcar] Updating ${toUpdate.length} existing records with Smartcar data...`);
+      for (const { id, data } of toUpdate) {
+        try {
+          await prisma.carModel.update({ where: { id }, data });
+        } catch {
+          // Skip failed updates
+        }
       }
     }
 
