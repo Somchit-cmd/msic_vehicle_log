@@ -22,6 +22,7 @@ model CarModel {
   drivetrain      String?  // FWD, RWD, AWD, 4WD
   seatingCapacity Int?
   price           Float?
+  priceEstimated  Boolean? @default(false) // true if price is estimated, not from source API
   imageUrl        String?
   color           String?
   bodyStyle       String?

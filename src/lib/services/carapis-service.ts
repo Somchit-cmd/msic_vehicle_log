@@ -350,6 +350,7 @@ async function storeVehicle(
     drivetrain: null,
     seatingCapacity: null,
     price: vehicle.price_usd ? parseFloat(vehicle.price_usd.toString()) : null,
+    priceEstimated: false, // CarAPIs provides actual prices
     imageUrl,
     color: vehicle.color && vehicle.color !== "unknown" && vehicle.color !== "other"
       ? vehicle.color.charAt(0).toUpperCase() + vehicle.color.slice(1)
@@ -368,9 +369,20 @@ async function storeVehicle(
   };
 
   if (existing) {
+    // Build update data that preserves existing non-null values
+    // Only overwrite with new data when the source actually has it
+    const updateData: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(carData)) {
+      if (value !== null && value !== undefined) {
+        updateData[key] = value;
+      } else if (existing[key as keyof typeof existing] === null || existing[key as keyof typeof existing] === undefined) {
+        // Both old and new are null, keep as-is
+      }
+      // If new is null but existing has a value, don't overwrite (skip this key)
+    }
     await db.carModel.update({
       where: { id: existing.id },
-      data: carData,
+      data: updateData,
     });
     return { added: false, updated: true };
   } else {

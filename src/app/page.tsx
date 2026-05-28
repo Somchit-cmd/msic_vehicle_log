@@ -69,6 +69,7 @@ interface CarModel {
   drivetrain: string | null;
   seatingCapacity: number | null;
   price: number | null;
+  priceEstimated: boolean | null;
   imageUrl: string | null;
   color: string | null;
   bodyStyle: string | null;
@@ -129,6 +130,8 @@ export default function Home() {
   const [smartcarLoading, setSmartcarLoading] = useState(false);
   const [fetchingSmartcarCatalog, setFetchingSmartcarCatalog] = useState(false);
   const [smartcarCatalogInfo, setSmartcarCatalogInfo] = useState<{ available: boolean; totalVehicles: number } | null>(null);
+  const [backfillingPrices, setBackfillingPrices] = useState(false);
+  const [priceCoverage, setPriceCoverage] = useState<{ totalCars: number; carsWithPrice: number; coveragePercent: number } | null>(null);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -473,6 +476,34 @@ export default function Home() {
     }
   };
 
+  const backfillPrices = async () => {
+    setBackfillingPrices(true);
+    try {
+      const res = await fetch("/api/cars/backfill-prices", { method: "POST" });
+      const data = await res.json();
+      toast({
+        title: "Price Backfill Complete",
+        description: `Updated ${data.updated} cars with estimated prices. Coverage: ${data.carsWithPrice}/${data.totalCars} (${data.coveragePercent}%)`,
+      });
+      setPriceCoverage({ totalCars: data.totalCars, carsWithPrice: data.carsWithPrice, coveragePercent: data.coveragePercent });
+      fetchCars(currentPage);
+    } catch {
+      toast({ title: "Error", description: "Failed to backfill prices", variant: "destructive" });
+    } finally {
+      setBackfillingPrices(false);
+    }
+  };
+
+  const checkPriceCoverage = async () => {
+    try {
+      const res = await fetch("/api/cars/backfill-prices");
+      const data = await res.json();
+      setPriceCoverage({ totalCars: data.totalCars, carsWithPrice: data.carsWithPrice, coveragePercent: data.coveragePercent });
+    } catch {
+      // silently fail
+    }
+  };
+
   const exportData = async (format: "csv" | "excel") => {
     try {
       const params = new URLSearchParams();
@@ -504,6 +535,7 @@ export default function Home() {
     fetchFilters();
     checkSmartcarStatus();
     checkSmartcarCatalogStatus();
+    checkPriceCoverage();
   }, [fetchFilters]);
 
   useEffect(() => {
@@ -560,13 +592,14 @@ export default function Home() {
     };
   }, [loading, cars.length]);
 
-  const formatPrice = (price: number | null) => {
+  const formatPrice = (price: number | null, estimated?: boolean | null) => {
     if (!price) return "N/A";
-    return new Intl.NumberFormat("en-US", {
+    const formatted = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       maximumFractionDigits: 0,
     }).format(price);
+    return estimated ? `Est. ${formatted}` : formatted;
   };
 
   const getTypeColor = (type: string) => {
@@ -672,6 +705,21 @@ export default function Home() {
                         {fetchingSmartcarCatalog ? "Fetching..." : smartcarCatalogInfo?.available ? `Smartcar Catalog (${smartcarCatalogInfo.totalVehicles})` : "Smartcar Catalog"}
                       </span>
                       <span className="text-xs text-slate-500">1,464 vehicles, FREE, no auth required</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-slate-500">Data Enhancement</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={backfillPrices}
+                    disabled={backfillingPrices}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <DollarSign className={`h-4 w-4 text-amber-500 ${backfillingPrices ? "animate-pulse" : ""}`} />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">
+                        {backfillingPrices ? "Estimating..." : priceCoverage ? `Estimate Prices (${priceCoverage.coveragePercent}%)` : "Estimate Missing Prices"}
+                      </span>
+                      <span className="text-xs text-slate-500">Fill in estimated MSRP for cars with no price data</span>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -1046,7 +1094,7 @@ export default function Home() {
                 <CardFooter className="px-4 pb-4 pt-0">
                   <div className="flex items-center justify-between w-full">
                     <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                      {formatPrice(car.price)}
+                      {formatPrice(car.price, car.priceEstimated)}
                     </span>
                     {car.drivetrain && (
                       <Badge variant="outline" className="text-xs">
@@ -1136,7 +1184,7 @@ export default function Home() {
                       {car.drivetrain || "N/A"}
                     </div>
                     <div className="col-span-2 text-right text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {formatPrice(car.price)}
+                      {formatPrice(car.price, car.priceEstimated)}
                     </div>
                   </div>
                 </CardContent>
@@ -1220,7 +1268,7 @@ export default function Home() {
                   <DollarSign className="h-4 w-4 text-emerald-500" />
                   <div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">Price</p>
-                    <p className="text-sm font-semibold">{formatPrice(selectedCar.price)}</p>
+                    <p className="text-sm font-semibold">{formatPrice(selectedCar.price, selectedCar.priceEstimated)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
