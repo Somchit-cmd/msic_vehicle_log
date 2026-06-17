@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { estimatePrice } from "@/lib/services/price-estimates";
+import { estimatePriceWithSource } from "@/lib/services/price-estimates";
 
 // POST /api/cars/backfill-prices - Backfill estimated prices for cars with null price
+// Uses the tiered price engine: curated dataset → trim-adjusted → brand heuristic.
+// Only fills rows where price IS NULL (never overwrites real imported prices).
 export async function POST() {
   try {
     // Find all cars with null price
@@ -15,16 +17,22 @@ export async function POST() {
 
     let updated = 0;
     let noEstimate = 0;
+    const bySource = { curated: 0, "trim-adjusted": 0, "brand-heuristic": 0, "unknown-brand": 0 };
 
     for (const car of carsWithoutPrice) {
-      const estimatedPrice = estimatePrice(car.brand, car.model, car.type, car.year);
+      const estimate = estimatePriceWithSource(car.brand, car.model, car.type, car.year);
 
-      if (estimatedPrice) {
+      if (estimate) {
         await db.carModel.update({
           where: { id: car.id },
-          data: { price: estimatedPrice, priceEstimated: true },
+          data: {
+            price: estimate.price,
+            priceEstimated: true,
+            priceSource: estimate.source,
+          },
         });
         updated++;
+        bySource[estimate.source]++;
       } else {
         noEstimate++;
       }
@@ -33,13 +41,16 @@ export async function POST() {
     const totalCars = await db.carModel.count();
     const carsWithPrice = await db.carModel.count({ where: { price: { not: null } } });
 
-    console.log(`[PriceBackfill] Done! Updated: ${updated}, No estimate: ${noEstimate}, Total with price: ${carsWithPrice}/${totalCars}`);
+    console.log(
+      `[PriceBackfill] Done! Updated: ${updated} (curated: ${bySource.curated}, trim: ${bySource["trim-adjusted"]}, heuristic: ${bySource["brand-heuristic"]}), No estimate: ${noEstimate}, Total with price: ${carsWithPrice}/${totalCars}`
+    );
 
     return NextResponse.json({
       success: true,
       totalWithoutPrice: carsWithoutPrice.length,
       updated,
       noEstimate,
+      bySource, // { curated, trim-adjusted, brand-heuristic }
       totalCars,
       carsWithPrice,
       coveragePercent: Math.round((carsWithPrice / totalCars) * 100),

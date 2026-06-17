@@ -23,6 +23,7 @@ model CarModel {
   seatingCapacity Int?
   price           Float?
   priceEstimated  Boolean? @default(false) // true if price is estimated, not from source API
+  priceSource     String? // which estimator produced price: "curated" | "trim-adjusted" | "brand-heuristic" | "carapis" | "carsxe"
   imageUrl        String?
   color           String?
   bodyStyle       String?
