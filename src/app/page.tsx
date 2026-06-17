@@ -48,6 +48,8 @@ import {
   List,
   Zap,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Clock,
   Database,
   Settings,
@@ -141,6 +143,23 @@ export default function Home() {
   const [fuelTypeFilter, setFuelTypeFilter] = useState("all");
   const [transmissionFilter, setTransmissionFilter] = useState("all");
 
+  // Sort state (server-side). sortKey = DB column; null = default brand/model.
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: string) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else {
+      // third click clears sort
+      setSortKey(null);
+      setSortDir("asc");
+    }
+  };
+
   const fetchCars = useCallback(async (page = 1) => {
     setLoading(true);
     try {
@@ -153,6 +172,10 @@ export default function Home() {
       if (yearFilter !== "all") params.set("year", yearFilter);
       if (fuelTypeFilter !== "all") params.set("fuelType", fuelTypeFilter);
       if (transmissionFilter !== "all") params.set("transmission", transmissionFilter);
+      if (sortKey) {
+        params.set("sort", sortKey);
+        params.set("order", sortDir);
+      }
 
       const res = await fetch(`/api/cars?${params}`);
       const data: CarResponse = await res.json();
@@ -165,7 +188,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, brandFilter, typeFilter, yearFilter, fuelTypeFilter, transmissionFilter, toast]);
+  }, [searchQuery, brandFilter, typeFilter, yearFilter, fuelTypeFilter, transmissionFilter, sortKey, sortDir, toast]);
 
   const fetchFilters = useCallback(async () => {
     try {
@@ -481,9 +504,16 @@ export default function Home() {
     try {
       const res = await fetch("/api/cars/backfill-prices", { method: "POST" });
       const data = await res.json();
+      const bySource = data.bySource || {};
+      const breakdown = [
+        bySource.curated ? `${bySource.curated} curated` : null,
+        bySource["trim-adjusted"] ? `${bySource["trim-adjusted"]} trim-adjusted` : null,
+        bySource["brand-heuristic"] ? `${bySource["brand-heuristic"]} heuristic` : null,
+        bySource["unknown-brand"] ? `${bySource["unknown-brand"]} est.` : null,
+      ].filter(Boolean).join(", ");
       toast({
-        title: "Price Backfill Complete",
-        description: `Updated ${data.updated} cars with estimated prices. Coverage: ${data.carsWithPrice}/${data.totalCars} (${data.coveragePercent}%)`,
+        title: "Prices Recalculated",
+        description: `Updated ${data.updated} cars${breakdown ? ` (${breakdown})` : ""}. Coverage: ${data.carsWithPrice}/${data.totalCars} (${data.coveragePercent}%)`,
       });
       setPriceCoverage({ totalCars: data.totalCars, carsWithPrice: data.carsWithPrice, coveragePercent: data.coveragePercent });
       fetchCars(currentPage);
@@ -539,9 +569,9 @@ export default function Home() {
   }, [fetchFilters]);
 
   useEffect(() => {
-    // Reset to page 1 when filters change
+    // Reset to page 1 when filters or sort change
     fetchCars(1);
-  }, [searchQuery, brandFilter, typeFilter, yearFilter, fuelTypeFilter, transmissionFilter]);
+  }, [searchQuery, brandFilter, typeFilter, yearFilter, fuelTypeFilter, transmissionFilter, sortKey, sortDir]);
 
   // Auto-fetch from all sources if no cars
   useEffect(() => {
@@ -717,9 +747,9 @@ export default function Home() {
                     <DollarSign className={`h-4 w-4 text-amber-500 ${backfillingPrices ? "animate-pulse" : ""}`} />
                     <div className="flex flex-col">
                       <span className="text-sm font-medium">
-                        {backfillingPrices ? "Estimating..." : priceCoverage ? `Estimate Prices (${priceCoverage.coveragePercent}%)` : "Estimate Missing Prices"}
+                        {backfillingPrices ? "Recalculating..." : priceCoverage ? `Recalculate Prices (${priceCoverage.coveragePercent}%)` : "Recalculate Prices"}
                       </span>
-                      <span className="text-xs text-slate-500">Fill in estimated MSRP for cars with no price data</span>
+                      <span className="text-xs text-slate-500">Fill/refresh prices via curated dataset + smart estimation</span>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -1042,12 +1072,18 @@ export default function Home() {
               >
                 {/* Car Image */}
                 <div className="relative h-48 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 overflow-hidden">
-                  <img
-                    src={car.imageUrl || ""}
-                    alt={`${car.brand} ${car.model}`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                  />
+                  {car.imageUrl ? (
+                    <img
+                      src={car.imageUrl}
+                      alt={`${car.brand} ${car.model}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Car className="h-12 w-12 text-slate-300 dark:text-slate-600" />
+                    </div>
+                  )}
                   <div className="absolute top-2 right-2">
                     <Badge className={`${getTypeColor(car.type)} text-xs font-medium`}>
                       {car.type}
@@ -1109,87 +1145,121 @@ export default function Home() {
           </div>
         )}
 
-        {/* List View */}
+        {/* List View — Sortable Data Table */}
         {!loading && cars.length > 0 && viewMode === "list" && (
-          <div className="space-y-2">
-            {/* Table Header */}
-            <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-              <div className="col-span-3">Car</div>
-              <div className="col-span-1">Type</div>
-              <div className="col-span-1">Year</div>
-              <div className="col-span-2">Engine</div>
-              <div className="col-span-1">Fuel</div>
-              <div className="col-span-1">HP</div>
-              <div className="col-span-1">Drive</div>
-              <div className="col-span-2 text-right">Price</div>
-            </div>
-
-            {cars.map((car) => (
-              <Card
-                key={car.id}
-                className="cursor-pointer hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-200 border-slate-200 dark:border-slate-800"
-                onClick={() => setSelectedCar(car)}
-              >
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-3 flex items-center gap-3">
-                      <div className="h-12 w-16 rounded-md bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex-shrink-0 overflow-hidden">
-                        <img
-                          src={car.imageUrl || ""}
-                          alt={`${car.brand} ${car.model}`}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium truncate">
-                          {car.brand}
-                        </p>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                          {car.model}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="col-span-1">
-                      <Badge className={`${getTypeColor(car.type)} text-xs`}>
-                        {car.type}
-                      </Badge>
-                    </div>
-                    <div className="col-span-1 text-sm text-slate-600 dark:text-slate-300">
-                      {car.year}
-                    </div>
-                    <div className="col-span-2 text-sm text-slate-600 dark:text-slate-300 truncate">
-                      {car.engine || "N/A"}
-                    </div>
-                    <div className="col-span-1">
-                      {car.fuelType && (
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${
-                            car.fuelType === "Electric"
-                              ? "border-amber-400 text-amber-600 dark:text-amber-400"
-                              : car.fuelType === "Hybrid"
-                              ? "border-green-400 text-green-600 dark:text-green-400"
-                              : ""
-                          }`}
-                        >
-                          {car.fuelType}
+          <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <SortHeader label="Car" col="model" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="left" className="pl-4" />
+                    <SortHeader label="Type" col="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortHeader label="Year" col="year" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <th className="py-2.5 px-2 text-left font-medium">Engine</th>
+                    <SortHeader label="Fuel" col="fuelType" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortHeader label="HP" col="horsepower" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
+                    <th className="py-2.5 px-2 text-left font-medium">Drive</th>
+                    <SortHeader label="Price" col="price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" className="pr-4" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {cars.map((car, i) => (
+                    <tr
+                      key={car.id}
+                      onClick={() => setSelectedCar(car)}
+                      className={`cursor-pointer border-b border-slate-100 dark:border-slate-800/60 transition-colors duration-150 hover:bg-emerald-50/60 dark:hover:bg-slate-800/60 ${
+                        i % 2 === 1 ? "bg-slate-50/40 dark:bg-slate-800/20" : ""
+                      }`}
+                    >
+                      {/* Car (thumb + brand + model) */}
+                      <td className="py-2.5 pl-4 pr-2">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-14 rounded-md bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex-shrink-0 overflow-hidden">
+                            {car.imageUrl ? (
+                              <img
+                                src={car.imageUrl}
+                                alt={`${car.brand} ${car.model}`}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Car className="h-4 w-4 text-slate-300 dark:text-slate-600" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium truncate">
+                              {car.brand}
+                            </p>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[180px]">
+                              {car.model}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      {/* Type */}
+                      <td className="py-2.5 px-2">
+                        <Badge className={`${getTypeColor(car.type)} text-xs`}>
+                          {car.type}
                         </Badge>
-                      )}
-                    </div>
-                    <div className="col-span-1 text-sm text-slate-600 dark:text-slate-300">
-                      {car.horsepower || "N/A"}
-                    </div>
-                    <div className="col-span-1 text-sm text-slate-600 dark:text-slate-300">
-                      {car.drivetrain || "N/A"}
-                    </div>
-                    <div className="col-span-2 text-right text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {formatPrice(car.price, car.priceEstimated)}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                      </td>
+                      {/* Year */}
+                      <td className="py-2.5 px-2 tabular-nums text-slate-600 dark:text-slate-300">
+                        {car.year}
+                      </td>
+                      {/* Engine — dash if missing */}
+                      <td className="py-2.5 px-2 text-slate-600 dark:text-slate-300 truncate max-w-[140px]">
+                        {car.engine ? (
+                          <span className="truncate">{car.engine}</span>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
+                      </td>
+                      {/* Fuel */}
+                      <td className="py-2.5 px-2">
+                        {car.fuelType ? (
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${
+                              car.fuelType === "Electric"
+                                ? "border-amber-400 text-amber-600 dark:text-amber-400"
+                                : car.fuelType === "Hybrid"
+                                ? "border-green-400 text-green-600 dark:text-green-400"
+                                : ""
+                            }`}
+                          >
+                            {car.fuelType}
+                          </Badge>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
+                      </td>
+                      {/* HP */}
+                      <td className="py-2.5 px-2 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                        {car.horsepower ? (
+                          car.horsepower
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
+                      </td>
+                      {/* Drive */}
+                      <td className="py-2.5 px-2 text-slate-600 dark:text-slate-300">
+                        {car.drivetrain ? (
+                          car.drivetrain
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
+                      </td>
+                      {/* Price */}
+                      <td className="py-2.5 pr-4 pl-2 text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        {formatPrice(car.price, car.priceEstimated)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -1243,11 +1313,17 @@ export default function Home() {
 
               {/* Image */}
               <div className="relative h-56 rounded-lg overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900">
-                <img
-                  src={selectedCar.imageUrl || ""}
-                  alt={`${selectedCar.brand} ${selectedCar.model}`}
-                  className="w-full h-full object-cover"
-                />
+                {selectedCar.imageUrl ? (
+                  <img
+                    src={selectedCar.imageUrl}
+                    alt={`${selectedCar.brand} ${selectedCar.model}`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Car className="h-16 w-16 text-slate-300 dark:text-slate-600" />
+                  </div>
+                )}
                 <div className="absolute top-3 right-3">
                   <Badge className={`${getTypeColor(selectedCar.type)} text-sm font-medium px-3 py-1`}>
                     {selectedCar.type}
@@ -1385,5 +1461,47 @@ export default function Home() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Sortable table header cell. Shows an up/down/neutral caret and calls onSort.
+function SortHeader({
+  label,
+  col,
+  sortKey,
+  sortDir,
+  onSort,
+  align = "left",
+  className = "",
+}: {
+  label: string;
+  col: string;
+  sortKey: string | null;
+  sortDir: "asc" | "desc";
+  onSort: (col: string) => void;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const active = sortKey === col;
+  return (
+    <th
+      className={`py-2.5 px-2 font-medium select-none cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 transition-colors ${
+        align === "right" ? "text-right" : "text-left"
+      } ${className}`}
+      onClick={() => onSort(col)}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
+        {label}
+        {active ? (
+          sortDir === "asc" ? (
+            <ArrowUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <ArrowDown className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 text-slate-300 dark:text-slate-600" />
+        )}
+      </span>
+    </th>
   );
 }

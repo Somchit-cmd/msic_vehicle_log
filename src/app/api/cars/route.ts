@@ -12,6 +12,25 @@ export async function GET(request: NextRequest) {
     const transmission = searchParams.get("transmission");
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
+    const sort = searchParams.get("sort"); // brand, model, type, year, fuelType, horsepower, price
+    const order = searchParams.get("order") === "desc" ? "desc" : "asc";
+
+    // Allowed sort columns (mapped to DB fields). Unknown → default ordering.
+    const SORTABLE: Record<string, string> = {
+      brand: "brand",
+      model: "model",
+      type: "type",
+      year: "year",
+      fuelType: "fuelType",
+      horsepower: "horsepower",
+      price: "price",
+    };
+    // Sort by the chosen column, always pushing NULLs to the end so rows with
+    // real data stay visible at the top of every page.
+    const orderBy =
+      sort && SORTABLE[sort]
+        ? [{ [SORTABLE[sort]]: { sort: order, nulls: "last" as const } }]
+        : [{ brand: "asc" }, { model: "asc" }];
 
     // Build where clause
     const where: Record<string, unknown> = {};
@@ -49,7 +68,7 @@ export async function GET(request: NextRequest) {
     const [cars, total] = await Promise.all([
       db.carModel.findMany({
         where,
-        orderBy: [{ brand: "asc" }, { model: "asc" }],
+        orderBy: orderBy as never,
         skip: (page - 1) * limit,
         take: limit,
       }),
